@@ -1,14 +1,12 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* Add this to force light mode as the default for form elements */
+  color-scheme: light; 
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* Delete or comment out the (prefers-color-scheme: dark) sections 
+   if you want your app to look the same for everyone */
 
 html,
 body {
@@ -24,19 +22,16 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Add this reset for all inputs to fight off Apple's defaults */
+input, textarea, select {
+  color: #000000 !important;
+  background-color: #ffffff !important;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 * {
   box-sizing: border-box;
   padding: 0;
   margin: 0;
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
 }
