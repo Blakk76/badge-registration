@@ -12,7 +12,7 @@ export default function LoginPage() {
     setMsg("");
 
     if (!email.trim()) {
-      setMsg("Enter your email.");
+      setMsg("Enter your IWF mail.");
       return;
     }
 
@@ -30,7 +30,7 @@ export default function LoginPage() {
     if (error) {
       setMsg(error.message);
     } else {
-      setMsg("Login link sent. Check your email.");
+      setMsg("Login link sent. Check your IWF mail.");
     }
   }
 
@@ -99,7 +99,7 @@ export default function LoginPage() {
 
         <input
           style={styles.input}
-          placeholder="Email"
+          placeholder="IWF mail"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
