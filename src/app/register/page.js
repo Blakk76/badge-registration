@@ -375,6 +375,8 @@ export default function RegisterPage() {
         top: 320,
         width: 365,
         background: "rgba(255,255,255,0.92)",
+        color: "#000000",       // <--- ADD THIS
+  webkitAppearance: "none", // <--- ADD THIS for Apple
       },
       countryInput: {
         ...controlBase,
@@ -382,6 +384,8 @@ export default function RegisterPage() {
         top: 388,
         width: 250,
         background: "rgba(255,255,255,0.92)",
+        color: "#000000",       // <--- ADD THIS
+  webkitAppearance: "none", // <--- ADD THIS for Apple
       },
 
       submitBtn: {
@@ -570,6 +574,9 @@ export default function RegisterPage() {
         fontSize: 14,
         fontWeight: 600,
         outline: "none",
+        color: "#000000",        // <--- ADD THIS
+  background: "#ffffff",   // <--- ADD THIS to be safe
+  webkitAppearance: "none", // <--- ADD THIS for Apple
       },
       editRow: {
         display: "grid",
