@@ -1,4 +1,3 @@
-// src/app/register/page.js
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -54,6 +53,7 @@ export default function RegisterPage() {
   // form
   const [fullName, setFullName] = useState("");
   const [country, setCountry] = useState("");
+  const [status, setStatus] = useState("TEAM");
 
   // photo
   const [photoPreview, setPhotoPreview] = useState(null);
@@ -70,11 +70,11 @@ export default function RegisterPage() {
   const [items, setItems] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
 
-  // edit modal (no photo re-upload)
+  // edit modal
   const [editOpen, setEditOpen] = useState(false);
   const [editId, setEditId] = useState(null);
   const [editName, setEditName] = useState("");
-  const [editCountry, setEditCountry] = useState("");
+  const [editStatus, setEditStatus] = useState("TEAM");
   const [editSaving, setEditSaving] = useState(false);
 
   async function loadMyRegistrations(email) {
@@ -82,7 +82,7 @@ export default function RegisterPage() {
 
     const { data, error } = await supabase
       .from("registrations")
-      .select("id, created_at, full_name, country, photo_path")
+      .select("id, created_at, full_name, country, status, photo_path")
       .eq("registered_by_email", email)
       .order("created_at", { ascending: false })
       .limit(200);
@@ -93,14 +93,13 @@ export default function RegisterPage() {
       return;
     }
 
-    // Generate signed URLs for thumbnails (private bucket)
     const withUrls = await Promise.all(
       (data || []).map(async (r) => {
         if (!r.photo_path) return { ...r, photo_url: null };
 
         const { data: signed, error: signErr } = await supabase.storage
           .from("photos")
-          .createSignedUrl(r.photo_path, 60 * 60); // 1 hour
+          .createSignedUrl(r.photo_path, 60 * 60);
 
         return { ...r, photo_url: signErr ? null : signed?.signedUrl };
       })
@@ -110,7 +109,7 @@ export default function RegisterPage() {
     setLoadingList(false);
   }
 
-  // Require auth + whitelist check + AUTO-FILL COUNTRY FROM allowed_users.country
+  // Require auth + whitelist check + autofill country from allowed_users
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getSession();
@@ -136,15 +135,13 @@ export default function RegisterPage() {
 
       setSessionEmail(email);
 
-      // autofill country once (user can still edit)
-      if (allowed?.country && !country.trim()) {
+      if (allowed?.country) {
         setCountry(allowed.country);
       }
 
       loadMyRegistrations(email);
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]); // intentionally not depending on `country` to avoid refire
+  }, [router]);
 
   function onSelectFile(e) {
     const file = e.target.files?.[0];
@@ -177,10 +174,10 @@ export default function RegisterPage() {
 
     if (!sessionEmail) return setMsg("Not logged in.");
     if (!fullName.trim()) return setMsg("Enter NAME SURNAME.");
-    if (!country.trim()) return setMsg("Enter COUNTRY.");
+    if (!country.trim()) return setMsg("Country is missing.");
+    if (!status.trim()) return setMsg("Select STATUS.");
     if (!photoBlob) return setMsg("Upload and crop a photo.");
 
-    // upload photo
     const fileName = `${Date.now()}-${Math.random().toString(16).slice(2)}.jpg`;
     const filePath = `${sessionEmail}/${fileName}`;
 
@@ -193,25 +190,23 @@ export default function RegisterPage() {
 
     if (uploadErr) return setMsg(uploadErr.message);
 
-    // save registration
     const { error: insertErr } = await supabase.from("registrations").insert({
       registered_by_email: sessionEmail,
       full_name: fullName.trim(),
       country: country.trim(),
+      status: status.trim(),
       photo_path: filePath,
     });
 
     if (insertErr) return setMsg(insertErr.message);
 
-    // reset form (keep country as convenience)
     setFullName("");
+    setStatus("TEAM");
     setPhotoPreview(null);
     setPhotoBlob(null);
 
-    // refresh list
     await loadMyRegistrations(sessionEmail);
 
-    // success popup
     setSuccessText("Registration saved.");
     setSuccessOpen(true);
     setTimeout(() => setSuccessOpen(false), 2000);
@@ -220,7 +215,7 @@ export default function RegisterPage() {
   function openEdit(r) {
     setEditId(r.id);
     setEditName(r.full_name || "");
-    setEditCountry(r.country || "");
+    setEditStatus(r.status || "TEAM");
     setEditOpen(true);
   }
 
@@ -233,7 +228,7 @@ export default function RegisterPage() {
       .from("registrations")
       .update({
         full_name: editName.trim(),
-        country: editCountry.trim(),
+        status: editStatus.trim(),
       })
       .eq("id", editId);
 
@@ -254,7 +249,6 @@ export default function RegisterPage() {
     const { error } = await supabase.from("registrations").delete().eq("id", id);
     if (error) return setMsg(error.message);
 
-    // also delete photo file (recommended)
     if (photo_path) {
       await supabase.storage.from("photos").remove([photo_path]);
     }
@@ -278,6 +272,7 @@ export default function RegisterPage() {
       borderRadius: 14,
       fontSize: 16,
       fontWeight: 600,
+      appearance: "none",
     };
 
     const primaryBtn = {
@@ -375,17 +370,15 @@ export default function RegisterPage() {
         top: 320,
         width: 365,
         background: "rgba(255,255,255,0.92)",
-        color: "#000000",       // <--- ADD THIS
-  webkitAppearance: "none", // <--- ADD THIS for Apple
       },
-      countryInput: {
+
+      statusSelect: {
         ...controlBase,
         left: 390,
         top: 388,
         width: 250,
         background: "rgba(255,255,255,0.92)",
-        color: "#000000",       // <--- ADD THIS
-  webkitAppearance: "none", // <--- ADD THIS for Apple
+        cursor: "pointer",
       },
 
       submitBtn: {
@@ -402,17 +395,27 @@ export default function RegisterPage() {
         opacity: 0.9,
       },
 
+      infoText: {
+        position: "absolute",
+        left: 390,
+        top: 530,
+        width: 360,
+        color: "white",
+        fontSize: 13,
+        lineHeight: 1.4,
+        textShadow: "0 1px 2px rgba(0,0,0,0.45)",
+      },
+
       msg: {
         position: "absolute",
         left: 390,
-        top: 520,
+        top: 585,
         width: 380,
         color: "white",
         fontSize: 14,
         textShadow: "0 1px 2px rgba(0,0,0,0.45)",
       },
 
-      // list: show ~5 rows, scroll if more
       listWrap: {
         width: 800,
       },
@@ -482,7 +485,6 @@ export default function RegisterPage() {
       },
       iconBtn,
 
-      // crop modal
       modalOverlay: {
         position: "fixed",
         inset: 0,
@@ -526,7 +528,6 @@ export default function RegisterPage() {
         fontWeight: 800,
       },
 
-      // overlay base for popups
       overlay: {
         position: "fixed",
         inset: 0,
@@ -564,7 +565,6 @@ export default function RegisterPage() {
         color: "#222",
       },
 
-      // edit inputs
       editInput: {
         width: "100%",
         height: 44,
@@ -574,9 +574,17 @@ export default function RegisterPage() {
         fontSize: 14,
         fontWeight: 600,
         outline: "none",
-        color: "#000000",        // <--- ADD THIS
-  background: "#ffffff",   // <--- ADD THIS to be safe
-  webkitAppearance: "none", // <--- ADD THIS for Apple
+      },
+      editSelect: {
+        width: "100%",
+        height: 44,
+        borderRadius: 12,
+        border: "1px solid rgba(0,0,0,0.15)",
+        padding: "0 12px",
+        fontSize: 14,
+        fontWeight: 600,
+        outline: "none",
+        background: "white",
       },
       editRow: {
         display: "grid",
@@ -644,20 +652,27 @@ export default function RegisterPage() {
           placeholder="NAME SURNAME"
         />
 
-        <input
-          style={styles.countryInput}
-          value={country}
-          onChange={(e) => setCountry(e.target.value)}
-          placeholder="COUNTRY"
-        />
+        <select
+          style={styles.statusSelect}
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+        >
+          <option value="TEAM">TEAM</option>
+          <option value="CONGRESS ONLY">CONGRESS ONLY</option>
+          <option value="EWF WB MEMBER">EWF WB MEMBER</option>
+        </select>
 
         <button style={styles.submitBtn} onClick={submit}>
           SUBMIT
         </button>
 
         <button style={styles.logoutBtn} onClick={logout}>
-          VERIFY
+          LOG OUT
         </button>
+
+        <div style={styles.infoText}>
+          Country: <strong>{country || "Not set"}</strong>
+        </div>
 
         {msg && <div style={styles.msg}>{msg}</div>}
       </div>
@@ -691,7 +706,9 @@ export default function RegisterPage() {
 
               <div style={styles.rowMain}>
                 <div style={styles.rowName}>{r.full_name}</div>
-                <div style={styles.rowMeta}>{r.country}</div>
+                <div style={styles.rowMeta}>
+                  {r.country} · {r.status || "TEAM"}
+                </div>
               </div>
 
               <div style={styles.rowRight}>
@@ -777,12 +794,15 @@ export default function RegisterPage() {
                 placeholder="NAME SURNAME"
                 style={styles.editInput}
               />
-              <input
-                value={editCountry}
-                onChange={(e) => setEditCountry(e.target.value)}
-                placeholder="COUNTRY"
-                style={styles.editInput}
-              />
+              <select
+                value={editStatus}
+                onChange={(e) => setEditStatus(e.target.value)}
+                style={styles.editSelect}
+              >
+                <option value="TEAM">TEAM</option>
+                <option value="CONGRESS ONLY">CONGRESS ONLY</option>
+                <option value="EWF WB MEMBER">EWF WB MEMBER</option>
+              </select>
             </div>
 
             <div style={styles.editFooter}>
