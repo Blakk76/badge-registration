@@ -659,7 +659,7 @@ export default function RegisterPage() {
         >
           <option value="TEAM">TEAM</option>
           <option value="CONGRESS ONLY">CONGRESS ONLY</option>
-          <option value="EWF WB MEMBER">EWF WB MEMBER</option>
+          <option value="EWF EB MEMBER">EWF EB MEMBER</option>
         </select>
 
         <button style={styles.submitBtn} onClick={submit}>
@@ -801,7 +801,7 @@ export default function RegisterPage() {
               >
                 <option value="TEAM">TEAM</option>
                 <option value="CONGRESS ONLY">CONGRESS ONLY</option>
-                <option value="EWF WB MEMBER">EWF WB MEMBER</option>
+                <option value="EWF EB MEMBER">EWF EB MEMBER</option>
               </select>
             </div>
 
