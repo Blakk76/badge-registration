@@ -667,7 +667,7 @@ export default function RegisterPage() {
         </button>
 
         <button style={styles.logoutBtn} onClick={logout}>
-          LOG OUT
+          VERIFY
         </button>
 
         <div style={styles.infoText}>
