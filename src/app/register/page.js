@@ -1,3 +1,4 @@
+// src/app/register/page.js
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -43,6 +44,7 @@ async function getCroppedBlob(imageSrc, cropPixels) {
 export default function RegisterPage() {
   const router = useRouter();
 
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [sessionEmail, setSessionEmail] = useState("");
   const [msg, setMsg] = useState("");
 
@@ -109,38 +111,68 @@ export default function RegisterPage() {
     setLoadingList(false);
   }
 
-  // Require auth + whitelist check + autofill country from allowed_users
+  // Safer auth check for magic-link users
   useEffect(() => {
-    (async () => {
-      const { data } = await supabase.auth.getSession();
-      const email = data?.session?.user?.email?.toLowerCase();
-      if (!email) return router.push("/login");
+    let cancelled = false;
 
-      const { data: allowed, error } = await supabase
-        .from("allowed_users")
-        .select("email, active, country")
-        .eq("email", email)
-        .eq("active", true)
-        .maybeSingle();
+    const checkAuth = async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const email = data?.session?.user?.email?.toLowerCase();
 
-      if (error) {
-        setMsg(error.message);
-        return;
+        if (!email) {
+          if (!cancelled) {
+            setCheckingAuth(false);
+            router.push("/login");
+          }
+          return;
+        }
+
+        const { data: allowed, error } = await supabase
+          .from("allowed_users")
+          .select("email, active, country")
+          .eq("email", email)
+          .eq("active", true)
+          .maybeSingle();
+
+        if (error) {
+          if (!cancelled) {
+            setMsg(error.message);
+            setCheckingAuth(false);
+          }
+          return;
+        }
+
+        if (!allowed) {
+          await supabase.auth.signOut();
+          if (!cancelled) {
+            setCheckingAuth(false);
+            router.push("/login");
+          }
+          return;
+        }
+
+        if (!cancelled) {
+          setSessionEmail(email);
+          if (allowed?.country) {
+            setCountry(allowed.country);
+          }
+          await loadMyRegistrations(email);
+          setCheckingAuth(false);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setMsg(String(e));
+          setCheckingAuth(false);
+        }
       }
+    };
 
-      if (!allowed) {
-        await supabase.auth.signOut();
-        return router.push("/login");
-      }
+    checkAuth();
 
-      setSessionEmail(email);
-
-      if (allowed?.country) {
-        setCountry(allowed.country);
-      }
-
-      loadMyRegistrations(email);
-    })();
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   function onSelectFile(e) {
@@ -299,6 +331,18 @@ export default function RegisterPage() {
     };
 
     return {
+      loadingPage: {
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "#b21d3d",
+        color: "white",
+        fontFamily: "Arial",
+        fontSize: 18,
+        fontWeight: 700,
+      },
+
       page: {
         minHeight: "100vh",
         display: "flex",
@@ -618,6 +662,10 @@ export default function RegisterPage() {
       },
     };
   }, [editSaving]);
+
+  if (checkingAuth) {
+    return <div style={styles.loadingPage}>Loading...</div>;
+  }
 
   return (
     <div style={styles.page}>
