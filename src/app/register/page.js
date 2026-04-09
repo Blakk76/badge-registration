@@ -76,7 +76,17 @@ export default function RegisterPage() {
   const [editId, setEditId] = useState(null);
   const [editName, setEditName] = useState("");
   const [editStatus, setEditStatus] = useState("TEAM");
+  const [editCountry, setEditCountry] = useState("");
+  const [editPhotoPath, setEditPhotoPath] = useState(null);
+  const [editPhotoUrl, setEditPhotoUrl] = useState(null);
+  const [editPhotoBlob, setEditPhotoBlob] = useState(null);
   const [editSaving, setEditSaving] = useState(false);
+
+  const [editCropOpen, setEditCropOpen] = useState(false);
+  const [editRawImageSrc, setEditRawImageSrc] = useState(null);
+  const [editCrop, setEditCrop] = useState({ x: 0, y: 0 });
+  const [editZoom, setEditZoom] = useState(1);
+  const [editCroppedAreaPixels, setEditCroppedAreaPixels] = useState(null);
 
   const isSuperuser = userRole === "superuser";
 
@@ -230,6 +240,32 @@ export default function RegisterPage() {
     setCropOpen(false);
   }
 
+  function onSelectEditFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setEditRawImageSrc(reader.result);
+      setEditZoom(1);
+      setEditCrop({ x: 0, y: 0 });
+      setEditCropOpen(true);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function applyEditCrop() {
+    setMsg("");
+    if (!editRawImageSrc || !editCroppedAreaPixels) return;
+
+    const { blob, preview } = await getCroppedBlob(editRawImageSrc, editCroppedAreaPixels);
+    if (!blob) return setMsg("Could not crop image.");
+
+    setEditPhotoBlob(blob);
+    setEditPhotoUrl(preview);
+    setEditCropOpen(false);
+  }
+
   async function submit() {
     setMsg("");
 
@@ -284,6 +320,10 @@ export default function RegisterPage() {
     setEditId(r.id);
     setEditName(r.full_name || "");
     setEditStatus(r.status || "TEAM");
+    setEditCountry(r.country || "");
+    setEditPhotoPath(r.photo_path || null);
+    setEditPhotoUrl(r.photo_url || null);
+    setEditPhotoBlob(null);
     setEditOpen(true);
   }
 
@@ -292,20 +332,50 @@ export default function RegisterPage() {
     setMsg("");
     setEditSaving(true);
 
+    let newPhotoPath = editPhotoPath;
+
+    if (editPhotoBlob) {
+      const newFileName = `${Date.now()}-${Math.random().toString(16).slice(2)}.jpg`;
+      newPhotoPath = `${sessionEmail}/${newFileName}`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from("photos")
+        .upload(newPhotoPath, editPhotoBlob, {
+          contentType: "image/jpeg",
+          upsert: false,
+        });
+
+      if (uploadErr) {
+        setEditSaving(false);
+        return setMsg(uploadErr.message);
+      }
+    }
+
     const { error } = await supabase
       .from("registrations")
       .update({
         full_name: editName.trim(),
         status: editStatus.trim(),
+        country: editCountry.trim(),
+        photo_path: newPhotoPath,
       })
       .eq("id", editId);
 
+    if (error) {
+      setEditSaving(false);
+      return setMsg(error.message);
+    }
+
+    if (editPhotoBlob && editPhotoPath && editPhotoPath !== newPhotoPath) {
+      await supabase.storage.from("photos").remove([editPhotoPath]);
+    }
+
     setEditSaving(false);
-
-    if (error) return setMsg(error.message);
-
     setEditOpen(false);
     await loadRegistrations(sessionEmail, userRole, countryFilter);
+    if (isSuperuser) {
+      await loadCountries();
+    }
   }
 
   async function deleteEntry(id, photo_path) {
@@ -649,7 +719,7 @@ export default function RegisterPage() {
         zIndex: 10000,
       },
       modalCard: {
-        width: "min(420px, 100%)",
+        width: "min(460px, 100%)",
         background: "white",
         borderRadius: 14,
         padding: 18,
@@ -725,6 +795,27 @@ export default function RegisterPage() {
         background: "#c2b69b",
         color: "#222",
         opacity: editSaving ? 0.7 : 1,
+      },
+      editPhotoPreviewWrap: {
+        display: "flex",
+        justifyContent: "center",
+        marginTop: 6,
+      },
+      editPhotoPreview: {
+        width: 90,
+        height: 90,
+        borderRadius: "50%",
+        objectFit: "cover",
+        background: "#eee",
+      },
+      editPhotoBtn: {
+        width: "100%",
+        padding: 10,
+        borderRadius: 10,
+        cursor: "pointer",
+        fontWeight: 800,
+        background: "#f3f3f3",
+        border: "1px solid rgba(0,0,0,0.15)",
       },
     };
   }, [editSaving]);
@@ -911,6 +1002,48 @@ export default function RegisterPage() {
         </div>
       )}
 
+      {editCropOpen && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modal}>
+            <div style={styles.cropArea}>
+              <Cropper
+                image={editRawImageSrc}
+                crop={editCrop}
+                zoom={editZoom}
+                aspect={1}
+                cropShape="round"
+                showGrid={false}
+                onCropChange={setEditCrop}
+                onZoomChange={setEditZoom}
+                onCropComplete={(a, pixels) => setEditCroppedAreaPixels(pixels)}
+              />
+            </div>
+
+            <div style={styles.zoomRow}>
+              <div style={{ width: 60, fontWeight: 900 }}>Zoom</div>
+              <input
+                style={styles.zoomInput}
+                type="range"
+                min={1}
+                max={3}
+                step={0.01}
+                value={editZoom}
+                onChange={(e) => setEditZoom(Number(e.target.value))}
+              />
+            </div>
+
+            <div style={styles.modalFooter}>
+              <button style={styles.modalBtn} onClick={() => setEditCropOpen(false)}>
+                Cancel
+              </button>
+              <button style={styles.modalBtn} onClick={applyEditCrop}>
+                Use photo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {successOpen && (
         <div style={styles.overlay} onClick={() => setSuccessOpen(false)}>
           <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
@@ -935,6 +1068,14 @@ export default function RegisterPage() {
                 placeholder="NAME SURNAME"
                 style={styles.editInput}
               />
+
+              <input
+                value={editCountry}
+                onChange={(e) => setEditCountry(e.target.value)}
+                placeholder="COUNTRY"
+                style={styles.editInput}
+              />
+
               <select
                 value={editStatus}
                 onChange={(e) => setEditStatus(e.target.value)}
@@ -946,6 +1087,30 @@ export default function RegisterPage() {
                   </option>
                 ))}
               </select>
+
+              <div style={styles.editPhotoPreviewWrap}>
+                {editPhotoUrl ? (
+                  <img src={editPhotoUrl} alt="Preview" style={styles.editPhotoPreview} />
+                ) : (
+                  <div style={styles.editPhotoPreview} />
+                )}
+              </div>
+
+              <input
+                id="edit-file"
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={onSelectEditFile}
+              />
+
+              <button
+                type="button"
+                style={styles.editPhotoBtn}
+                onClick={() => document.getElementById("edit-file")?.click()}
+              >
+                Replace photo
+              </button>
             </div>
 
             <div style={styles.editFooter}>
