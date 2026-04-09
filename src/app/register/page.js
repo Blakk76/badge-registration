@@ -1,4 +1,3 @@
-// src/app/register/page.js
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -6,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Cropper from "react-easy-crop";
 import { supabase } from "@/lib/supabaseClient";
 
-// Create cropped image (square)
 async function getCroppedBlob(imageSrc, cropPixels) {
   const image = new Image();
   image.crossOrigin = "anonymous";
@@ -41,53 +39,75 @@ async function getCroppedBlob(imageSrc, cropPixels) {
   return { blob, preview: canvas.toDataURL("image/jpeg", 0.9) };
 }
 
+const STATUS_OPTIONS = ["TEAM", "CONGRESS ONLY", "EWF WB MEMBER"];
+
 export default function RegisterPage() {
   const router = useRouter();
 
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [sessionEmail, setSessionEmail] = useState("");
+  const [userCountry, setUserCountry] = useState("");
+  const [userRole, setUserRole] = useState("user");
   const [msg, setMsg] = useState("");
 
-  // Success popup
   const [successOpen, setSuccessOpen] = useState(false);
   const [successText, setSuccessText] = useState("");
 
-  // form
   const [fullName, setFullName] = useState("");
   const [country, setCountry] = useState("");
   const [status, setStatus] = useState("TEAM");
 
-  // photo
   const [photoPreview, setPhotoPreview] = useState(null);
   const [photoBlob, setPhotoBlob] = useState(null);
 
-  // crop modal
   const [cropOpen, setCropOpen] = useState(false);
   const [rawImageSrc, setRawImageSrc] = useState(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
 
-  // list
   const [items, setItems] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
 
-  // edit modal
+  const [countryFilter, setCountryFilter] = useState("ALL");
+  const [allCountries, setAllCountries] = useState([]);
+
   const [editOpen, setEditOpen] = useState(false);
   const [editId, setEditId] = useState(null);
   const [editName, setEditName] = useState("");
   const [editStatus, setEditStatus] = useState("TEAM");
   const [editSaving, setEditSaving] = useState(false);
 
-  async function loadMyRegistrations(email) {
-    setLoadingList(true);
+  const isSuperuser = userRole === "superuser";
 
+  async function loadCountries() {
     const { data, error } = await supabase
       .from("registrations")
-      .select("id, created_at, full_name, country, status, photo_path")
-      .eq("registered_by_email", email)
+      .select("country")
+      .order("country", { ascending: true });
+
+    if (error) return;
+
+    const unique = [...new Set((data || []).map((x) => x.country).filter(Boolean))];
+    setAllCountries(unique);
+  }
+
+  async function loadRegistrations(email, role, selectedCountry = "ALL") {
+    setLoadingList(true);
+
+    let query = supabase
+      .from("registrations")
+      .select("id, created_at, full_name, country, status, photo_path, registered_by_email")
       .order("created_at", { ascending: false })
-      .limit(200);
+      .limit(500);
+
+    if (role !== "superuser") {
+      query = query.eq("registered_by_email", email);
+    } else if (selectedCountry !== "ALL") {
+      query = query.eq("country", selectedCountry);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       setMsg(error.message);
@@ -111,7 +131,6 @@ export default function RegisterPage() {
     setLoadingList(false);
   }
 
-  // Safer auth check for magic-link users
   useEffect(() => {
     let cancelled = false;
 
@@ -130,7 +149,7 @@ export default function RegisterPage() {
 
         const { data: allowed, error } = await supabase
           .from("allowed_users")
-          .select("email, active, country")
+          .select("email, active, country, role")
           .eq("email", email)
           .eq("active", true)
           .maybeSingle();
@@ -153,11 +172,15 @@ export default function RegisterPage() {
         }
 
         if (!cancelled) {
+          const role = allowed.role || "user";
           setSessionEmail(email);
-          if (allowed?.country) {
-            setCountry(allowed.country);
+          setUserRole(role);
+          setUserCountry(allowed.country || "");
+          setCountry(allowed.country || "");
+          await loadRegistrations(email, role, "ALL");
+          if (role === "superuser") {
+            await loadCountries();
           }
-          await loadMyRegistrations(email);
           setCheckingAuth(false);
         }
       } catch (e) {
@@ -174,6 +197,12 @@ export default function RegisterPage() {
       cancelled = true;
     };
   }, [router]);
+
+  useEffect(() => {
+    if (!checkingAuth && isSuperuser) {
+      loadRegistrations(sessionEmail, userRole, countryFilter);
+    }
+  }, [countryFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function onSelectFile(e) {
     const file = e.target.files?.[0];
@@ -237,7 +266,14 @@ export default function RegisterPage() {
     setPhotoPreview(null);
     setPhotoBlob(null);
 
-    await loadMyRegistrations(sessionEmail);
+    if (!isSuperuser) {
+      setCountry(userCountry || "");
+    }
+
+    await loadRegistrations(sessionEmail, userRole, countryFilter);
+    if (isSuperuser) {
+      await loadCountries();
+    }
 
     setSuccessText("Registration saved.");
     setSuccessOpen(true);
@@ -269,7 +305,7 @@ export default function RegisterPage() {
     if (error) return setMsg(error.message);
 
     setEditOpen(false);
-    await loadMyRegistrations(sessionEmail);
+    await loadRegistrations(sessionEmail, userRole, countryFilter);
   }
 
   async function deleteEntry(id, photo_path) {
@@ -285,7 +321,10 @@ export default function RegisterPage() {
       await supabase.storage.from("photos").remove([photo_path]);
     }
 
-    await loadMyRegistrations(sessionEmail);
+    await loadRegistrations(sessionEmail, userRole, countryFilter);
+    if (isSuperuser) {
+      await loadCountries();
+    }
   }
 
   async function logout() {
@@ -450,6 +489,18 @@ export default function RegisterPage() {
         textShadow: "0 1px 2px rgba(0,0,0,0.45)",
       },
 
+      superuserText: {
+        position: "absolute",
+        left: 390,
+        top: 555,
+        width: 360,
+        color: "#f4e9d1",
+        fontSize: 12,
+        fontWeight: 700,
+        letterSpacing: 0.3,
+        textShadow: "0 1px 2px rgba(0,0,0,0.45)",
+      },
+
       msg: {
         position: "absolute",
         left: 390,
@@ -465,10 +516,11 @@ export default function RegisterPage() {
       },
       listHeader: {
         display: "flex",
-        alignItems: "baseline",
+        alignItems: "center",
         justifyContent: "space-between",
         marginBottom: 10,
         color: "white",
+        gap: 10,
       },
       listTitle: {
         fontSize: 16,
@@ -477,6 +529,20 @@ export default function RegisterPage() {
       listCount: {
         fontSize: 13,
         opacity: 0.85,
+      },
+      filterWrap: {
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+      },
+      filterSelect: {
+        height: 40,
+        borderRadius: 12,
+        border: "none",
+        padding: "0 12px",
+        fontSize: 14,
+        fontWeight: 600,
+        background: "rgba(255,255,255,0.95)",
       },
       listBox: {
         background: "rgba(255,255,255,0.96)",
@@ -705,9 +771,11 @@ export default function RegisterPage() {
           value={status}
           onChange={(e) => setStatus(e.target.value)}
         >
-          <option value="TEAM">TEAM</option>
-          <option value="CONGRESS ONLY">CONGRESS ONLY</option>
-          <option value="EWF EB MEMBER">EWF EB MEMBER</option>
+          {STATUS_OPTIONS.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
         </select>
 
         <button style={styles.submitBtn} onClick={submit}>
@@ -715,21 +783,45 @@ export default function RegisterPage() {
         </button>
 
         <button style={styles.logoutBtn} onClick={logout}>
-          VERIFY
+          LOG OUT
         </button>
 
         <div style={styles.infoText}>
           Country: <strong>{country || "Not set"}</strong>
         </div>
 
+        {isSuperuser && (
+          <div style={styles.superuserText}>SUPERUSER MODE</div>
+        )}
+
         {msg && <div style={styles.msg}>{msg}</div>}
       </div>
 
       <div style={styles.listWrap}>
         <div style={styles.listHeader}>
-          <div style={styles.listTitle}>Your registrations</div>
-          <div style={styles.listCount}>
-            {loadingList ? "Loading..." : `${items.length}`}
+          <div style={styles.listTitle}>
+            {isSuperuser ? "All registrations" : "Your registrations"}
+          </div>
+
+          <div style={styles.filterWrap}>
+            {isSuperuser && (
+              <select
+                style={styles.filterSelect}
+                value={countryFilter}
+                onChange={(e) => setCountryFilter(e.target.value)}
+              >
+                <option value="ALL">All countries</option>
+                {allCountries.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <div style={styles.listCount}>
+              {loadingList ? "Loading..." : `${items.length}`}
+            </div>
           </div>
         </div>
 
@@ -756,6 +848,7 @@ export default function RegisterPage() {
                 <div style={styles.rowName}>{r.full_name}</div>
                 <div style={styles.rowMeta}>
                   {r.country} · {r.status || "TEAM"}
+                  {isSuperuser ? ` · entered by ${r.registered_by_email}` : ""}
                 </div>
               </div>
 
@@ -847,9 +940,11 @@ export default function RegisterPage() {
                 onChange={(e) => setEditStatus(e.target.value)}
                 style={styles.editSelect}
               >
-                <option value="TEAM">TEAM</option>
-                <option value="CONGRESS ONLY">CONGRESS ONLY</option>
-                <option value="EWF EB MEMBER">EWF EB MEMBER</option>
+                {STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
               </select>
             </div>
 
