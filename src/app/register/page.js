@@ -41,7 +41,7 @@ async function getCroppedBlob(imageSrc, cropPixels) {
 
 const STATUS_OPTIONS = [
   "TEAM",
-  "CONGRESS ONLY",
+  "CONGRESS PARTICIPANT",
   "EWF EB MEMBER",
   "MEDIA",
   "LOC",
