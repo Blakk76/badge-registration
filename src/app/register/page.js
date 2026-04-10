@@ -46,6 +46,7 @@ const STATUS_OPTIONS = [
   "MEDIA",
   "LOC",
   "VIP",
+  "VVIP",
   "DCO",
   "TV"
 ];
