@@ -39,7 +39,16 @@ async function getCroppedBlob(imageSrc, cropPixels) {
   return { blob, preview: canvas.toDataURL("image/jpeg", 0.9) };
 }
 
-const STATUS_OPTIONS = ["TEAM", "CONGRESS ONLY", "EWF WB MEMBER"];
+const STATUS_OPTIONS = [
+  "TEAM",
+  "CONGRESS ONLY",
+  "EWF EB MEMBER",
+  "MEDIA",
+  "LOC",
+  "VIP",
+  "DCO",
+  "TV"
+];
 
 export default function RegisterPage() {
   const router = useRouter();
