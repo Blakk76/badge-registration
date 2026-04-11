@@ -157,7 +157,10 @@ export default function RegisterPage() {
     const checkAuth = async () => {
       try {
         const { data } = await supabase.auth.getSession();
+        console.log("REGISTER PAGE SESSION:", data?.session);
+
         const email = data?.session?.user?.email?.toLowerCase();
+        console.log("REGISTER PAGE EMAIL:", email);
 
         if (!email) {
           if (!cancelled) {
@@ -173,6 +176,9 @@ export default function RegisterPage() {
           .eq("email", email)
           .eq("active", true)
           .maybeSingle();
+
+        console.log("REGISTER PAGE ALLOWED USER:", allowed);
+        console.log("REGISTER PAGE ALLOWED ERROR:", error);
 
         if (error) {
           if (!cancelled) {
@@ -204,6 +210,7 @@ export default function RegisterPage() {
           setCheckingAuth(false);
         }
       } catch (e) {
+        console.error("REGISTER PAGE EXCEPTION:", e);
         if (!cancelled) {
           setMsg(String(e));
           setCheckingAuth(false);
@@ -709,21 +716,64 @@ export default function RegisterPage() {
       },
       iconBtn,
 
-      modalOverlay: {
+      // MAIN MODALS
+      overlay: {
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.7)",
+        background: "rgba(0,0,0,0.6)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         padding: 20,
-        zIndex: 9999,
+        zIndex: 10000,
       },
-      modal: {
+      modalCard: {
+        width: "min(460px, 100%)",
+        background: "white",
+        borderRadius: 14,
+        padding: 18,
+        textAlign: "center",
+        position: "relative",
+        zIndex: 10001,
+      },
+      modalTitle: {
+        fontSize: 18,
+        fontWeight: 900,
+        marginBottom: 8,
+      },
+      modalBody: {
+        fontSize: 14,
+        marginBottom: 14,
+      },
+      okBtn: {
+        width: "100%",
+        padding: 10,
+        borderRadius: 10,
+        border: "none",
+        cursor: "pointer",
+        fontWeight: 900,
+        background: "#c2b69b",
+        color: "#222",
+      },
+
+      // CROP MODALS - HIGHER Z-INDEX
+      cropOverlay: {
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.75)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+        zIndex: 20000,
+      },
+      cropModal: {
         width: "min(560px, 100%)",
         background: "white",
         borderRadius: 12,
         overflow: "hidden",
+        position: "relative",
+        zIndex: 20001,
       },
       cropArea: {
         position: "relative",
@@ -750,43 +800,6 @@ export default function RegisterPage() {
         border: "1px solid #ddd",
         cursor: "pointer",
         fontWeight: 800,
-      },
-
-      overlay: {
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.6)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 20,
-        zIndex: 10000,
-      },
-      modalCard: {
-        width: "min(460px, 100%)",
-        background: "white",
-        borderRadius: 14,
-        padding: 18,
-        textAlign: "center",
-      },
-      modalTitle: {
-        fontSize: 18,
-        fontWeight: 900,
-        marginBottom: 8,
-      },
-      modalBody: {
-        fontSize: 14,
-        marginBottom: 14,
-      },
-      okBtn: {
-        width: "100%",
-        padding: 10,
-        borderRadius: 10,
-        border: "none",
-        cursor: "pointer",
-        fontWeight: 900,
-        background: "#c2b69b",
-        color: "#222",
       },
 
       editInput: {
@@ -1074,8 +1087,8 @@ export default function RegisterPage() {
       </div>
 
       {cropOpen && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modal}>
+        <div style={styles.cropOverlay}>
+          <div style={styles.cropModal}>
             <div style={styles.cropArea}>
               <Cropper
                 image={rawImageSrc}
@@ -1116,8 +1129,8 @@ export default function RegisterPage() {
       )}
 
       {editCropOpen && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modal}>
+        <div style={styles.cropOverlay}>
+          <div style={styles.cropModal}>
             <div style={styles.cropArea}>
               <Cropper
                 image={editRawImageSrc}
