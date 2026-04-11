@@ -41,14 +41,13 @@ async function getCroppedBlob(imageSrc, cropPixels) {
 
 const STATUS_OPTIONS = [
   "TEAM",
-  "CONGRESS PARTICIPANT",
+  "CONGRESS ONLY",
   "EWF EB MEMBER",
   "MEDIA",
   "LOC",
   "VIP",
-  "VVIP",
   "DCO",
-  "TV"
+  "TV",
 ];
 
 export default function RegisterPage() {
@@ -80,6 +79,7 @@ export default function RegisterPage() {
   const [loadingList, setLoadingList] = useState(false);
 
   const [countryFilter, setCountryFilter] = useState("ALL");
+  const [searchTerm, setSearchTerm] = useState("");
   const [allCountries, setAllCountries] = useState([]);
 
   const [editOpen, setEditOpen] = useState(false);
@@ -119,7 +119,7 @@ export default function RegisterPage() {
       .from("registrations")
       .select("id, created_at, full_name, country, status, photo_path, registered_by_email")
       .order("created_at", { ascending: false })
-      .limit(500);
+      .limit(1000);
 
     if (role !== "superuser") {
       query = query.eq("registered_by_email", email);
@@ -314,6 +314,8 @@ export default function RegisterPage() {
 
     if (!isSuperuser) {
       setCountry(userCountry || "");
+    } else {
+      setCountry("");
     }
 
     await loadRegistrations(sessionEmail, userRole, countryFilter);
@@ -411,6 +413,25 @@ export default function RegisterPage() {
     await supabase.auth.signOut();
     router.push("/login");
   }
+
+  const filteredItems = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return items;
+
+    return items.filter((r) => {
+      const haystack = [
+        r.full_name,
+        r.country,
+        r.status,
+        r.registered_by_email,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(q);
+    });
+  }, [items, searchTerm]);
 
   const styles = useMemo(() => {
     const controlBase = {
@@ -535,13 +556,12 @@ export default function RegisterPage() {
         background: "rgba(255,255,255,0.92)",
       },
 
-      statusSelect: {
+      secondField: {
         ...controlBase,
         left: 390,
         top: 388,
         width: 250,
         background: "rgba(255,255,255,0.92)",
-        cursor: "pointer",
       },
 
       submitBtn: {
@@ -609,11 +629,14 @@ export default function RegisterPage() {
       listCount: {
         fontSize: 13,
         opacity: 0.85,
+        whiteSpace: "nowrap",
       },
       filterWrap: {
         display: "flex",
         alignItems: "center",
         gap: 10,
+        flexWrap: "wrap",
+        justifyContent: "flex-end",
       },
       filterSelect: {
         height: 40,
@@ -623,6 +646,17 @@ export default function RegisterPage() {
         fontSize: 14,
         fontWeight: 600,
         background: "rgba(255,255,255,0.95)",
+      },
+      searchInput: {
+        height: 40,
+        borderRadius: 12,
+        border: "none",
+        padding: "0 12px",
+        fontSize: 14,
+        fontWeight: 600,
+        background: "rgba(255,255,255,0.95)",
+        minWidth: 220,
+        outline: "none",
       },
       listBox: {
         background: "rgba(255,255,255,0.96)",
@@ -867,35 +901,95 @@ export default function RegisterPage() {
           placeholder="NAME SURNAME"
         />
 
-        <select
-          style={styles.statusSelect}
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-        >
-          {STATUS_OPTIONS.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        {isSuperuser ? (
+          <input
+            style={styles.secondField}
+            value={country}
+            onChange={(e) => setCountry(e.target.value)}
+            placeholder="COUNTRY"
+          />
+        ) : (
+          <select
+            style={styles.secondField}
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+          >
+            {STATUS_OPTIONS.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        )}
 
-        <button style={styles.submitBtn} onClick={submit}>
+        {isSuperuser && (
+          <select
+            style={{
+              ...styles.secondField,
+              top: 444,
+              width: 250,
+            }}
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+          >
+            {STATUS_OPTIONS.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        )}
+
+        <button
+          style={{
+            ...styles.submitBtn,
+            top: isSuperuser ? 510 : 460,
+          }}
+          onClick={submit}
+        >
           SUBMIT
         </button>
 
-        <button style={styles.logoutBtn} onClick={logout}>
+        <button
+          style={{
+            ...styles.logoutBtn,
+            top: isSuperuser ? 510 : 460,
+          }}
+          onClick={logout}
+        >
           LOG OUT
         </button>
 
-        <div style={styles.infoText}>
+        <div
+          style={{
+            ...styles.infoText,
+            top: isSuperuser ? 580 : 530,
+          }}
+        >
           Country: <strong>{country || "Not set"}</strong>
         </div>
 
         {isSuperuser && (
-          <div style={styles.superuserText}>SUPERUSER MODE</div>
+          <div
+            style={{
+              ...styles.superuserText,
+              top: isSuperuser ? 605 : 555,
+            }}
+          >
+            SUPERUSER MODE
+          </div>
         )}
 
-        {msg && <div style={styles.msg}>{msg}</div>}
+        {msg && (
+          <div
+            style={{
+              ...styles.msg,
+              top: isSuperuser ? 635 : 585,
+            }}
+          >
+            {msg}
+          </div>
+        )}
       </div>
 
       <div style={styles.listWrap}>
@@ -906,37 +1000,46 @@ export default function RegisterPage() {
 
           <div style={styles.filterWrap}>
             {isSuperuser && (
-              <select
-                style={styles.filterSelect}
-                value={countryFilter}
-                onChange={(e) => setCountryFilter(e.target.value)}
-              >
-                <option value="ALL">All countries</option>
-                {allCountries.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+              <>
+                <select
+                  style={styles.filterSelect}
+                  value={countryFilter}
+                  onChange={(e) => setCountryFilter(e.target.value)}
+                >
+                  <option value="ALL">All countries</option>
+                  {allCountries.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+
+                <input
+                  style={styles.searchInput}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search person, country, status..."
+                />
+              </>
             )}
 
             <div style={styles.listCount}>
-              {loadingList ? "Loading..." : `${items.length}`}
+              {loadingList ? "Loading..." : `${filteredItems.length}`}
             </div>
           </div>
         </div>
 
         <div style={styles.listBox}>
-          {items.length === 0 && !loadingList && (
+          {filteredItems.length === 0 && !loadingList && (
             <div style={{ padding: 10, opacity: 0.7 }}>No registrations yet.</div>
           )}
 
-          {items.map((r, idx) => (
+          {filteredItems.map((r, idx) => (
             <div
               key={r.id}
               style={{
                 ...styles.row,
-                ...(idx === items.length - 1 ? styles.rowLast : {}),
+                ...(idx === filteredItems.length - 1 ? styles.rowLast : {}),
               }}
             >
               {r.photo_url ? (
