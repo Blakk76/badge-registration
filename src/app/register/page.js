@@ -42,10 +42,12 @@ async function getCroppedBlob(imageSrc, cropPixels) {
 const STATUS_OPTIONS = [
   "TEAM",
   "CONGRESS ONLY",
+  "CONGRESS PARTICIPANT",
   "EWF EB MEMBER",
   "MEDIA",
   "LOC",
   "VIP",
+  "VVIP",
   "DCO",
   "TV",
 ];
@@ -99,6 +101,18 @@ export default function RegisterPage() {
   const [editCroppedAreaPixels, setEditCroppedAreaPixels] = useState(null);
 
   const isSuperuser = userRole === "superuser";
+
+  function openSinglePdf(id) {
+    window.open(`/api/badge/${id}`, "_blank");
+  }
+
+  function exportCountryPdf() {
+    if (!countryFilter || countryFilter === "ALL") return;
+    window.open(
+      `/api/export-country?country=${encodeURIComponent(countryFilter)}`,
+      "_blank"
+    );
+  }
 
   async function loadCountries() {
     const { data, error } = await supabase
@@ -665,6 +679,18 @@ export default function RegisterPage() {
         minWidth: 220,
         outline: "none",
       },
+      exportBtn: {
+        height: 40,
+        borderRadius: 12,
+        border: "none",
+        padding: "0 14px",
+        fontSize: 14,
+        fontWeight: 800,
+        background: "#c2b69b",
+        color: "#222",
+        cursor: "pointer",
+        opacity: countryFilter === "ALL" ? 0.5 : 1,
+      },
       listBox: {
         background: "rgba(255,255,255,0.96)",
         borderRadius: 16,
@@ -715,6 +741,20 @@ export default function RegisterPage() {
         flex: "0 0 auto",
       },
       iconBtn,
+      pdfBtn: {
+        height: 30,
+        borderRadius: 10,
+        border: "1px solid rgba(0,0,0,0.12)",
+        padding: "0 10px",
+        background: "#c2b69b",
+        color: "#222",
+        cursor: "pointer",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontWeight: 900,
+        lineHeight: 1,
+      },
 
       // MAIN MODALS
       overlay: {
@@ -875,7 +915,7 @@ export default function RegisterPage() {
         border: "1px solid rgba(0,0,0,0.15)",
       },
     };
-  }, [editSaving]);
+  }, [editSaving, countryFilter]);
 
   if (checkingAuth) {
     return <div style={styles.loadingPage}>Loading...</div>;
@@ -1033,6 +1073,14 @@ export default function RegisterPage() {
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Search person, country, status..."
                 />
+
+                <button
+                  style={styles.exportBtn}
+                  onClick={exportCountryPdf}
+                  disabled={countryFilter === "ALL"}
+                >
+                  Export 3×3 PDF
+                </button>
               </>
             )}
 
@@ -1070,9 +1118,20 @@ export default function RegisterPage() {
               </div>
 
               <div style={styles.rowRight}>
+                {isSuperuser && (
+                  <button
+                    title="PDF"
+                    style={styles.pdfBtn}
+                    onClick={() => openSinglePdf(r.id)}
+                  >
+                    PDF
+                  </button>
+                )}
+
                 <button title="Edit" style={styles.iconBtn} onClick={() => openEdit(r)}>
                   ✎
                 </button>
+
                 <button
                   title="Delete"
                   style={styles.iconBtn}

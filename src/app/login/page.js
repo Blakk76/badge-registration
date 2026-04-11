@@ -11,26 +11,29 @@ export default function LoginPage() {
   async function sendLink() {
     setMsg("");
 
-    if (!email.trim()) {
-      setMsg("Enter your EWF mail.");
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!cleanEmail) {
+      setMsg("Enter your email.");
       return;
     }
 
     setLoading(true);
 
     const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim().toLowerCase(),
+      email: cleanEmail,
       options: {
-        emailRedirectTo: `${window.location.origin}/register`,
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     });
 
     setLoading(false);
 
     if (error) {
+      console.error("login error:", error);
       setMsg(error.message);
     } else {
-      setMsg("Login link sent. Check your EWF mail, if mail has not arrived in 1-2 mins, check SPAM folder.");
+      setMsg("Login link sent. Check your email.");
     }
   }
 
@@ -41,7 +44,7 @@ export default function LoginPage() {
       alignItems: "center",
       justifyContent: "center",
       background: "#b21d3d",
-      fontFamily: "Arial",
+      fontFamily: "Arial, sans-serif",
       padding: 20,
     },
 
@@ -60,7 +63,13 @@ export default function LoginPage() {
       fontSize: 22,
       fontWeight: 900,
       textAlign: "center",
-      marginBottom: 6,
+    },
+
+    subtitle: {
+      fontSize: 13,
+      textAlign: "center",
+      opacity: 0.7,
+      lineHeight: 1.4,
     },
 
     input: {
@@ -84,29 +93,47 @@ export default function LoginPage() {
       opacity: loading ? 0.7 : 1,
     },
 
+    helper: {
+      fontSize: 12,
+      textAlign: "center",
+      opacity: 0.7,
+      lineHeight: 1.4,
+    },
+
     msg: {
       fontSize: 14,
       textAlign: "center",
-      opacity: 0.8,
       minHeight: 18,
+      opacity: 0.85,
     },
   };
 
   return (
     <div style={styles.page}>
       <div style={styles.card}>
-        <div style={styles.title}>Login</div>
+        <div style={styles.title}>Registration Login</div>
+
+        <div style={styles.subtitle}>
+          Enter your federation email to receive a login link
+        </div>
 
         <input
           style={styles.input}
-          placeholder="Your EWF mail"
+          placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") sendLink();
+          }}
         />
 
         <button style={styles.btn} onClick={sendLink} disabled={loading}>
           {loading ? "Sending..." : "Send login link"}
         </button>
+
+        <div style={styles.helper}>
+          Please check spam folder if the email does not arrive within 1–2 minutes
+        </div>
 
         {msg && <div style={styles.msg}>{msg}</div>}
       </div>
