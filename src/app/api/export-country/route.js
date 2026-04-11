@@ -15,6 +15,10 @@ function hexToRgb(hex) {
   );
 }
 
+function mmToPt(mm) {
+  return mm * 2.834645669;
+}
+
 async function makeOvalPng(inputBuffer, width, height) {
   const fitted = await sharp(inputBuffer)
     .resize(width, height, {
@@ -94,8 +98,9 @@ function normalizeStatusLines(rawStatus) {
   }
 
   if (upper === "EWF EB MEMBER") {
-    return ["EWF","EB MEMBER"];
+    return ["EWF", "EB MEMBER"];
   }
+
   return [upper];
 }
 
@@ -113,8 +118,18 @@ async function loadBadgeAssets(pdfDoc, rawStatus) {
 
   const bgPath = path.join(process.cwd(), "public", bgFile);
   const topPath = path.join(process.cwd(), "public", topFile);
-  const bookFontPath = path.join(process.cwd(), "public", "fonts", "FuturaPTCond-Book.ttf");
-  const boldFontPath = path.join(process.cwd(), "public", "fonts", "FuturaPT-Bold.ttf");
+  const bookFontPath = path.join(
+    process.cwd(),
+    "public",
+    "fonts",
+    "FuturaPTCond-Book.ttf"
+  );
+  const boldFontPath = path.join(
+    process.cwd(),
+    "public",
+    "fonts",
+    "FuturaPT-Bold.ttf"
+  );
 
   const [bgBytes, topBytes, bookFontBytes, boldFontBytes] = await Promise.all([
     fs.readFile(bgPath),
@@ -127,6 +142,7 @@ async function loadBadgeAssets(pdfDoc, rawStatus) {
 
   const [bgEmbeddedPage] = await pdfDoc.embedPdf(bgBytes, [0]);
   const [topEmbeddedPage] = await pdfDoc.embedPdf(topBytes, [0]);
+
   const futuraBook = await pdfDoc.embedFont(bookFontBytes);
   const futuraBold = await pdfDoc.embedFont(boldFontBytes);
 
@@ -135,7 +151,8 @@ async function loadBadgeAssets(pdfDoc, rawStatus) {
 
 async function drawBadge(pdfDoc, supabase, user, page, originX = 0, originY = 0) {
   const rawStatus = (user.status || "").toUpperCase();
-const statusLines = normalizeStatusLines(rawStatus);
+  const statusLines = normalizeStatusLines(rawStatus);
+
   const fullName = (user.full_name || "").toUpperCase();
   const country = (user.country || "").toUpperCase();
 
@@ -146,6 +163,7 @@ const statusLines = normalizeStatusLines(rawStatus);
   const badgeHeight = bgEmbeddedPage.height;
   const beige = hexToRgb("#c2b59b");
 
+  // Background
   page.drawPage(bgEmbeddedPage, {
     x: originX,
     y: originY,
@@ -153,6 +171,7 @@ const statusLines = normalizeStatusLines(rawStatus);
     height: badgeHeight,
   });
 
+  // Photo
   const photoX = originX + 18;
   const photoY = originY + 118;
   const photoW = 170;
@@ -189,6 +208,7 @@ const statusLines = normalizeStatusLines(rawStatus);
     });
   }
 
+  // Top overlay
   page.drawPage(topEmbeddedPage, {
     x: originX,
     y: originY,
@@ -196,37 +216,12 @@ const statusLines = normalizeStatusLines(rawStatus);
     height: badgeHeight,
   });
 
+  // Dynamic text
   const baseNameSize = 26;
   const baseCountrySize = 20;
-  const baseStatusSize = 45;
 
-  const nameMaxWidth = 150;
-  const countryMaxWidth = 90;
-  const statusMaxHeight = 130;
-
-  const nameSize = fitFontSize(
-    fullName,
-    futuraBook,
-    baseNameSize,
-    nameMaxWidth,
-    14
-  );
-
-  const countrySize = fitFontSize(
-    country,
-    futuraBook,
-    baseCountrySize,
-    countryMaxWidth,
-    12
-  );
-
-  const statusSize = fitFontSize(
-    status,
-    futuraBold,
-    baseStatusSize,
-    statusMaxHeight,
-    24
-  );
+  const nameSize = fitFontSize(fullName, futuraBook, baseNameSize, 150, 14);
+  const countrySize = fitFontSize(country, futuraBook, baseCountrySize, 90, 12);
 
   page.drawText(fullName, {
     x: originX + 75,
@@ -244,37 +239,34 @@ const statusLines = normalizeStatusLines(rawStatus);
     color: beige,
   });
 
- const tracking = 80;
-const isCongressStyle =
-  rawStatus === "CONGRESS PARTICIPANT" ||
-  rawStatus === "CONGRESS ONLY";
-const statusSize = isCongressStyle ? 22 : 45;
+  // Status: one or two lines, vertical
+  const tracking = 80;
+  const isCongressStyle =
+    rawStatus === "CONGRESS PARTICIPANT" ||
+    rawStatus === "CONGRESS ONLY";
+  const statusSize = isCongressStyle ? 22 : 45;
 
-// for rotated text, line separation must happen on X
-const lineGapX = 24;
+  // for rotated text, line separation happens on X
+  const lineGapX = 24;
 
-// anchor for first line
-const statusX = 220;
-const statusY = 300;
+  // anchor for first line
+  const statusX = originX + 220;
+  const statusY = originY + 300;
 
-statusLines.forEach((line, index) => {
-  drawTrackedText(page, line, {
-    x: statusX - index * lineGapX,
-    y: statusY,
-    size: statusSize,
-    font: futuraBold,
-    color: beige,
-    rotate: degrees(-90),
-    tracking,
-    direction: "vertical",
+  statusLines.forEach((line, index) => {
+    drawTrackedText(page, line, {
+      x: statusX - index * lineGapX,
+      y: statusY,
+      size: statusSize,
+      font: futuraBold,
+      color: beige,
+      rotate: degrees(-90),
+      tracking,
+      direction: "vertical",
+    });
   });
-});
 
   return { badgeWidth, badgeHeight };
-}
-
-function mmToPt(mm) {
-  return mm * 2.834645669;
 }
 
 export async function GET(request) {
@@ -298,15 +290,20 @@ export async function GET(request) {
       .order("full_name", { ascending: true });
 
     if (error) {
-      return new Response(`Supabase query error: ${error.message}`, { status: 500 });
+      return new Response(`Supabase query error: ${error.message}`, {
+        status: 500,
+      });
     }
 
     if (!users || users.length === 0) {
-      return new Response(`No registrations found for ${country}`, { status: 404 });
+      return new Response(`No registrations found for ${country}`, {
+        status: 404,
+      });
     }
 
     const pdfDoc = await PDFDocument.create();
 
+    // Page + layout
     const pageWidth = mmToPt(300);
     const pageHeight = mmToPt(500);
 
