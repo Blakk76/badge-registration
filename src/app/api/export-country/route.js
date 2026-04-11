@@ -82,14 +82,21 @@ function drawTrackedText(page, text, options) {
   }
 }
 
-function normalizeStatus(rawStatus) {
+function normalizeStatusLines(rawStatus) {
   const upper = (rawStatus || "").toUpperCase();
 
-  const STATUS_MAP = {
-    "CONGRESS PARTICIPANT": "CONGRESS",
-  };
+  if (upper === "CONGRESS PARTICIPANT") {
+    return ["CONGRESS", "PARTICIPANT"];
+  }
 
-  return STATUS_MAP[upper] || upper;
+  if (upper === "CONGRESS ONLY") {
+    return ["CONGRESS", "ONLY"];
+  }
+
+  if (upper === "EWF EB MEMBER") {
+    return ["EWF","EB MEMBER"];
+  }
+  return [upper];
 }
 
 async function loadBadgeAssets(pdfDoc, rawStatus) {
@@ -128,7 +135,7 @@ async function loadBadgeAssets(pdfDoc, rawStatus) {
 
 async function drawBadge(pdfDoc, supabase, user, page, originX = 0, originY = 0) {
   const rawStatus = (user.status || "").toUpperCase();
-  const status = normalizeStatus(rawStatus);
+const statusLines = normalizeStatusLines(rawStatus);
   const fullName = (user.full_name || "").toUpperCase();
   const country = (user.country || "").toUpperCase();
 
@@ -237,16 +244,31 @@ async function drawBadge(pdfDoc, supabase, user, page, originX = 0, originY = 0)
     color: beige,
   });
 
-  drawTrackedText(page, status, {
-    x: originX + 210,
-    y: originY + 300,
+ const tracking = 80;
+const isCongressStyle =
+  rawStatus === "CONGRESS PARTICIPANT" ||
+  rawStatus === "CONGRESS ONLY";
+const statusSize = isCongressStyle ? 22 : 45;
+
+// for rotated text, line separation must happen on X
+const lineGapX = 24;
+
+// anchor for first line
+const statusX = 220;
+const statusY = 300;
+
+statusLines.forEach((line, index) => {
+  drawTrackedText(page, line, {
+    x: statusX - index * lineGapX,
+    y: statusY,
     size: statusSize,
     font: futuraBold,
     color: beige,
     rotate: degrees(-90),
-    tracking: 200,
+    tracking,
     direction: "vertical",
   });
+});
 
   return { badgeWidth, badgeHeight };
 }
