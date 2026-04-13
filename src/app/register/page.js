@@ -50,6 +50,7 @@ const STATUS_OPTIONS = [
   "VVIP",
   "DCO",
   "TV",
+  "ITO",
 ];
 
 export default function RegisterPage() {
