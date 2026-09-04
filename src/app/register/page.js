@@ -345,8 +345,7 @@ export default function RegisterPage() {
         .toString(16)
         .slice(2)}.jpg`;
 
-    const filePath =
-      `${sessionEmail}/${fileName}`;
+    const filePath = `sandbox/${fileName}`;
 
     const { error: uploadErr } =
       await supabase.storage
@@ -442,8 +441,7 @@ export default function RegisterPage() {
           .toString(16)
           .slice(2)}.jpg`;
 
-      newPhotoPath =
-        `${sessionEmail}/${newFileName}`;
+     newPhotoPath = `sandbox/${newFileName}`;
 
       const { error: uploadErr } =
         await supabase.storage
