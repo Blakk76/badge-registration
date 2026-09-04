@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import Cropper from "react-easy-crop";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -54,8 +53,6 @@ const STATUS_OPTIONS = [
 ];
 
 export default function RegisterPage() {
-  const router = useRouter();
-
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [sessionEmail, setSessionEmail] = useState("");
   const [userCountry, setUserCountry] = useState("");
@@ -109,6 +106,7 @@ export default function RegisterPage() {
 
   function exportCountryPdf() {
     if (!countryFilter || countryFilter === "ALL") return;
+
     window.open(
       `/api/export-country?country=${encodeURIComponent(countryFilter)}`,
       "_blank"
@@ -123,16 +121,25 @@ export default function RegisterPage() {
 
     if (error) return;
 
-    const unique = [...new Set((data || []).map((x) => x.country).filter(Boolean))];
+    const unique = [
+      ...new Set((data || []).map((x) => x.country).filter(Boolean)),
+    ];
+
     setAllCountries(unique);
   }
 
-  async function loadRegistrations(email, role, selectedCountry = "ALL") {
+  async function loadRegistrations(
+    email,
+    role,
+    selectedCountry = "ALL"
+  ) {
     setLoadingList(true);
 
     let query = supabase
       .from("registrations")
-      .select("id, created_at, full_name, country, status, photo_path, registered_by_email")
+      .select(
+        "id, created_at, full_name, country, status, photo_path, registered_by_email"
+      )
       .order("created_at", { ascending: false })
       .limit(1000);
 
@@ -152,13 +159,22 @@ export default function RegisterPage() {
 
     const withUrls = await Promise.all(
       (data || []).map(async (r) => {
-        if (!r.photo_path) return { ...r, photo_url: null };
+        if (!r.photo_path) {
+          return {
+            ...r,
+            photo_url: null,
+          };
+        }
 
-        const { data: signed, error: signErr } = await supabase.storage
-          .from("photos")
-          .createSignedUrl(r.photo_path, 60 * 60);
+        const { data: signed, error: signErr } =
+          await supabase.storage
+            .from("photos")
+            .createSignedUrl(r.photo_path, 60 * 60);
 
-        return { ...r, photo_url: signErr ? null : signed?.signedUrl };
+        return {
+          ...r,
+          photo_url: signErr ? null : signed?.signedUrl,
+        };
       })
     );
 
@@ -169,63 +185,25 @@ export default function RegisterPage() {
   useEffect(() => {
     let cancelled = false;
 
-    const checkAuth = async () => {
+    const startSandbox = async () => {
       try {
-        const { data } = await supabase.auth.getSession();
-        console.log("REGISTER PAGE SESSION:", data?.session);
-
-        const email = data?.session?.user?.email?.toLowerCase();
-        console.log("REGISTER PAGE EMAIL:", email);
-
-        if (!email) {
-          if (!cancelled) {
-            setCheckingAuth(false);
-            router.push("/login");
-          }
-          return;
-        }
-
-        const { data: allowed, error } = await supabase
-          .from("allowed_users")
-          .select("email, active, country, role")
-          .eq("email", email)
-          .eq("active", true)
-          .maybeSingle();
-
-        console.log("REGISTER PAGE ALLOWED USER:", allowed);
-        console.log("REGISTER PAGE ALLOWED ERROR:", error);
-
-        if (error) {
-          if (!cancelled) {
-            setMsg(error.message);
-            setCheckingAuth(false);
-          }
-          return;
-        }
-
-        if (!allowed) {
-          await supabase.auth.signOut();
-          if (!cancelled) {
-            setCheckingAuth(false);
-            router.push("/login");
-          }
-          return;
-        }
+        const email = "sandbox@demo.local";
+        const role = "superuser";
 
         if (!cancelled) {
-          const role = allowed.role || "user";
           setSessionEmail(email);
           setUserRole(role);
-          setUserCountry(allowed.country || "");
-          setCountry(allowed.country || "");
+          setUserCountry("");
+          setCountry("");
+
           await loadRegistrations(email, role, "ALL");
-          if (role === "superuser") {
-            await loadCountries();
-          }
+          await loadCountries();
+
           setCheckingAuth(false);
         }
       } catch (e) {
-        console.error("REGISTER PAGE EXCEPTION:", e);
+        console.error("SANDBOX STARTUP ERROR:", e);
+
         if (!cancelled) {
           setMsg(String(e));
           setCheckingAuth(false);
@@ -233,39 +211,57 @@ export default function RegisterPage() {
       }
     };
 
-    checkAuth();
+    startSandbox();
 
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, []);
 
   useEffect(() => {
     if (!checkingAuth && isSuperuser) {
-      loadRegistrations(sessionEmail, userRole, countryFilter);
+      loadRegistrations(
+        sessionEmail,
+        userRole,
+        countryFilter
+      );
     }
   }, [countryFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function onSelectFile(e) {
     const file = e.target.files?.[0];
+
     if (!file) return;
 
     const reader = new FileReader();
+
     reader.onload = () => {
       setRawImageSrc(reader.result);
       setZoom(1);
-      setCrop({ x: 0, y: 0 });
+      setCrop({
+        x: 0,
+        y: 0,
+      });
       setCropOpen(true);
     };
+
     reader.readAsDataURL(file);
   }
 
   async function applyCrop() {
     setMsg("");
+
     if (!rawImageSrc || !croppedAreaPixels) return;
 
-    const { blob, preview } = await getCroppedBlob(rawImageSrc, croppedAreaPixels);
-    if (!blob) return setMsg("Could not crop image.");
+    const { blob, preview } =
+      await getCroppedBlob(
+        rawImageSrc,
+        croppedAreaPixels
+      );
+
+    if (!blob) {
+      return setMsg("Could not crop image.");
+    }
 
     setPhotoBlob(blob);
     setPhotoPreview(preview);
@@ -274,24 +270,45 @@ export default function RegisterPage() {
 
   function onSelectEditFile(e) {
     const file = e.target.files?.[0];
+
     if (!file) return;
 
     const reader = new FileReader();
+
     reader.onload = () => {
       setEditRawImageSrc(reader.result);
       setEditZoom(1);
-      setEditCrop({ x: 0, y: 0 });
+
+      setEditCrop({
+        x: 0,
+        y: 0,
+      });
+
       setEditCropOpen(true);
     };
+
     reader.readAsDataURL(file);
   }
 
   async function applyEditCrop() {
     setMsg("");
-    if (!editRawImageSrc || !editCroppedAreaPixels) return;
 
-    const { blob, preview } = await getCroppedBlob(editRawImageSrc, editCroppedAreaPixels);
-    if (!blob) return setMsg("Could not crop image.");
+    if (
+      !editRawImageSrc ||
+      !editCroppedAreaPixels
+    ) {
+      return;
+    }
+
+    const { blob, preview } =
+      await getCroppedBlob(
+        editRawImageSrc,
+        editCroppedAreaPixels
+      );
+
+    if (!blob) {
+      return setMsg("Could not crop image.");
+    }
 
     setEditPhotoBlob(blob);
     setEditPhotoUrl(preview);
@@ -301,33 +318,67 @@ export default function RegisterPage() {
   async function submit() {
     setMsg("");
 
-    if (!sessionEmail) return setMsg("Not logged in.");
-    if (!fullName.trim()) return setMsg("Enter NAME SURNAME.");
-    if (!country.trim()) return setMsg("Country is missing.");
-    if (!status.trim()) return setMsg("Select STATUS.");
-    if (!photoBlob) return setMsg("Upload and crop a photo.");
+    if (!sessionEmail) {
+      return setMsg("Not logged in.");
+    }
 
-    const fileName = `${Date.now()}-${Math.random().toString(16).slice(2)}.jpg`;
-    const filePath = `${sessionEmail}/${fileName}`;
+    if (!fullName.trim()) {
+      return setMsg("Enter NAME SURNAME.");
+    }
 
-    const { error: uploadErr } = await supabase.storage
-      .from("photos")
-      .upload(filePath, photoBlob, {
-        contentType: "image/jpeg",
-        upsert: false,
-      });
+    if (!country.trim()) {
+      return setMsg("Country is missing.");
+    }
 
-    if (uploadErr) return setMsg(uploadErr.message);
+    if (!status.trim()) {
+      return setMsg("Select STATUS.");
+    }
 
-    const { error: insertErr } = await supabase.from("registrations").insert({
-      registered_by_email: sessionEmail,
-      full_name: fullName.trim(),
-      country: country.trim(),
-      status: status.trim(),
-      photo_path: filePath,
-    });
+    if (!photoBlob) {
+      return setMsg(
+        "Upload and crop a photo."
+      );
+    }
 
-    if (insertErr) return setMsg(insertErr.message);
+    const fileName =
+      `${Date.now()}-${Math.random()
+        .toString(16)
+        .slice(2)}.jpg`;
+
+    const filePath =
+      `${sessionEmail}/${fileName}`;
+
+    const { error: uploadErr } =
+      await supabase.storage
+        .from("photos")
+        .upload(
+          filePath,
+          photoBlob,
+          {
+            contentType: "image/jpeg",
+            upsert: false,
+          }
+        );
+
+    if (uploadErr) {
+      return setMsg(uploadErr.message);
+    }
+
+    const { error: insertErr } =
+      await supabase
+        .from("registrations")
+        .insert({
+          registered_by_email:
+            sessionEmail,
+          full_name: fullName.trim(),
+          country: country.trim(),
+          status: status.trim(),
+          photo_path: filePath,
+        });
+
+    if (insertErr) {
+      return setMsg(insertErr.message);
+    }
 
     setFullName("");
     setStatus("TEAM");
@@ -340,14 +391,26 @@ export default function RegisterPage() {
       setCountry("");
     }
 
-    await loadRegistrations(sessionEmail, userRole, countryFilter);
+    await loadRegistrations(
+      sessionEmail,
+      userRole,
+      countryFilter
+    );
+
     if (isSuperuser) {
       await loadCountries();
     }
 
-    setSuccessText("Registration saved.");
+    setSuccessText(
+      "Registration saved."
+    );
+
     setSuccessOpen(true);
-    setTimeout(() => setSuccessOpen(false), 2000);
+
+    setTimeout(
+      () => setSuccessOpen(false),
+      2000
+    );
   }
 
   function openEdit(r) {
@@ -355,105 +418,177 @@ export default function RegisterPage() {
     setEditName(r.full_name || "");
     setEditStatus(r.status || "TEAM");
     setEditCountry(r.country || "");
-    setEditPhotoPath(r.photo_path || null);
-    setEditPhotoUrl(r.photo_url || null);
+    setEditPhotoPath(
+      r.photo_path || null
+    );
+    setEditPhotoUrl(
+      r.photo_url || null
+    );
     setEditPhotoBlob(null);
     setEditOpen(true);
   }
 
   async function saveEdit() {
     if (!editId) return;
+
     setMsg("");
     setEditSaving(true);
 
     let newPhotoPath = editPhotoPath;
 
     if (editPhotoBlob) {
-      const newFileName = `${Date.now()}-${Math.random().toString(16).slice(2)}.jpg`;
-      newPhotoPath = `${sessionEmail}/${newFileName}`;
+      const newFileName =
+        `${Date.now()}-${Math.random()
+          .toString(16)
+          .slice(2)}.jpg`;
 
-      const { error: uploadErr } = await supabase.storage
-        .from("photos")
-        .upload(newPhotoPath, editPhotoBlob, {
-          contentType: "image/jpeg",
-          upsert: false,
-        });
+      newPhotoPath =
+        `${sessionEmail}/${newFileName}`;
+
+      const { error: uploadErr } =
+        await supabase.storage
+          .from("photos")
+          .upload(
+            newPhotoPath,
+            editPhotoBlob,
+            {
+              contentType:
+                "image/jpeg",
+              upsert: false,
+            }
+          );
 
       if (uploadErr) {
         setEditSaving(false);
-        return setMsg(uploadErr.message);
+        return setMsg(
+          uploadErr.message
+        );
       }
     }
 
-    const { error } = await supabase
-      .from("registrations")
-      .update({
-        full_name: editName.trim(),
-        status: editStatus.trim(),
-        country: editCountry.trim(),
-        photo_path: newPhotoPath,
-      })
-      .eq("id", editId);
+    const { error } =
+      await supabase
+        .from("registrations")
+        .update({
+          full_name:
+            editName.trim(),
+          status:
+            editStatus.trim(),
+          country:
+            editCountry.trim(),
+          photo_path:
+            newPhotoPath,
+        })
+        .eq("id", editId);
 
     if (error) {
       setEditSaving(false);
-      return setMsg(error.message);
+
+      return setMsg(
+        error.message
+      );
     }
 
-    if (editPhotoBlob && editPhotoPath && editPhotoPath !== newPhotoPath) {
-      await supabase.storage.from("photos").remove([editPhotoPath]);
+    if (
+      editPhotoBlob &&
+      editPhotoPath &&
+      editPhotoPath !==
+        newPhotoPath
+    ) {
+      await supabase.storage
+        .from("photos")
+        .remove([
+          editPhotoPath,
+        ]);
     }
 
     setEditSaving(false);
     setEditOpen(false);
-    await loadRegistrations(sessionEmail, userRole, countryFilter);
+
+    await loadRegistrations(
+      sessionEmail,
+      userRole,
+      countryFilter
+    );
+
     if (isSuperuser) {
       await loadCountries();
     }
   }
 
-  async function deleteEntry(id, photo_path) {
-    const ok = window.confirm("Delete this registration?");
+  async function deleteEntry(
+    id,
+    photo_path
+  ) {
+    const ok =
+      window.confirm(
+        "Delete this registration?"
+      );
+
     if (!ok) return;
 
     setMsg("");
 
-    const { error } = await supabase.from("registrations").delete().eq("id", id);
-    if (error) return setMsg(error.message);
+    const { error } =
+      await supabase
+        .from("registrations")
+        .delete()
+        .eq("id", id);
 
-    if (photo_path) {
-      await supabase.storage.from("photos").remove([photo_path]);
+    if (error) {
+      return setMsg(
+        error.message
+      );
     }
 
-    await loadRegistrations(sessionEmail, userRole, countryFilter);
+    if (photo_path) {
+      await supabase.storage
+        .from("photos")
+        .remove([
+          photo_path,
+        ]);
+    }
+
+    await loadRegistrations(
+      sessionEmail,
+      userRole,
+      countryFilter
+    );
+
     if (isSuperuser) {
       await loadCountries();
     }
   }
 
-  async function logout() {
-    await supabase.auth.signOut();
-    router.push("/login");
-  }
+  const filteredItems =
+    useMemo(() => {
+      const q =
+        searchTerm
+          .trim()
+          .toLowerCase();
 
-  const filteredItems = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
-    if (!q) return items;
+      if (!q) {
+        return items;
+      }
 
-    return items.filter((r) => {
-      const haystack = [
-        r.full_name,
-        r.country,
-        r.status,
-        r.registered_by_email,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+      return items.filter(
+        (r) => {
+          const haystack = [
+            r.full_name,
+            r.country,
+            r.status,
+            r.registered_by_email,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
 
-      return haystack.includes(q);
-    });
-  }, [items, searchTerm]);
+          return haystack.includes(
+            q
+          );
+        }
+      );
+    }, [items, searchTerm]);
 
   const styles = useMemo(() => {
     const controlBase = {
@@ -482,7 +617,8 @@ export default function RegisterPage() {
       width: 30,
       height: 30,
       borderRadius: 10,
-      border: "1px solid rgba(0,0,0,0.12)",
+      border:
+        "1px solid rgba(0,0,0,0.12)",
       background: "white",
       cursor: "pointer",
       display: "inline-flex",
@@ -497,7 +633,8 @@ export default function RegisterPage() {
         minHeight: "100vh",
         display: "flex",
         alignItems: "center",
-        justifyContent: "center",
+        justifyContent:
+          "center",
         background: "#b21d3d",
         color: "white",
         fontFamily: "Arial",
@@ -508,9 +645,11 @@ export default function RegisterPage() {
       page: {
         minHeight: "100vh",
         display: "flex",
-        flexDirection: "column",
+        flexDirection:
+          "column",
         alignItems: "center",
-        justifyContent: "center",
+        justifyContent:
+          "center",
         fontFamily: "Arial",
         padding: 20,
         gap: 14,
@@ -521,16 +660,23 @@ export default function RegisterPage() {
         width: 800,
         height: 800,
         position: "relative",
-        backgroundImage: "url(/badge-bg.jpg)",
-        backgroundSize: "100% 100%",
-        backgroundPosition: "top left",
-        backgroundRepeat: "no-repeat",
+        backgroundImage:
+          "url(/badge-bg.jpg)",
+        backgroundSize:
+          "100% 100%",
+        backgroundPosition:
+          "top left",
+        backgroundRepeat:
+          "no-repeat",
         borderRadius: 24,
         overflow: "hidden",
-        boxShadow: "0 18px 44px rgba(0,0,0,0.28)",
+        boxShadow:
+          "0 18px 44px rgba(0,0,0,0.28)",
       },
 
-      hiddenFile: { display: "none" },
+      hiddenFile: {
+        display: "none",
+      },
 
       photoCircle: {
         position: "absolute",
@@ -543,27 +689,36 @@ export default function RegisterPage() {
         overflow: "hidden",
         display: "flex",
         alignItems: "center",
-        justifyContent: "center",
-        background: "rgba(255,255,255,0.08)",
+        justifyContent:
+          "center",
+        background:
+          "rgba(255,255,255,0.08)",
       },
+
       photoImg: {
         width: "100%",
         height: "100%",
         objectFit: "cover",
       },
+
       photoLabelWrap: {
         display: "flex",
-        flexDirection: "column",
+        flexDirection:
+          "column",
         alignItems: "center",
         gap: 10,
-        transform: "translateY(6px)",
+        transform:
+          "translateY(6px)",
       },
+
       photoLabel: {
-        color: "rgba(255,255,255,0.85)",
+        color:
+          "rgba(255,255,255,0.85)",
         fontWeight: 900,
         letterSpacing: 0.6,
         fontSize: 18,
       },
+
       photoIcon: {
         fontSize: 40,
         lineHeight: 1,
@@ -575,7 +730,8 @@ export default function RegisterPage() {
         left: 390,
         top: 320,
         width: 365,
-        background: "rgba(255,255,255,0.92)",
+        background:
+          "rgba(255,255,255,0.92)",
       },
 
       secondField: {
@@ -583,7 +739,8 @@ export default function RegisterPage() {
         left: 390,
         top: 388,
         width: 250,
-        background: "rgba(255,255,255,0.92)",
+        background:
+          "rgba(255,255,255,0.92)",
       },
 
       submitBtn: {
@@ -592,6 +749,7 @@ export default function RegisterPage() {
         top: 460,
         width: 170,
       },
+
       logoutBtn: {
         ...primaryBtn,
         left: 585,
@@ -608,7 +766,8 @@ export default function RegisterPage() {
         color: "white",
         fontSize: 13,
         lineHeight: 1.4,
-        textShadow: "0 1px 2px rgba(0,0,0,0.45)",
+        textShadow:
+          "0 1px 2px rgba(0,0,0,0.45)",
       },
 
       superuserText: {
@@ -620,7 +779,8 @@ export default function RegisterPage() {
         fontSize: 12,
         fontWeight: 700,
         letterSpacing: 0.3,
-        textShadow: "0 1px 2px rgba(0,0,0,0.45)",
+        textShadow:
+          "0 1px 2px rgba(0,0,0,0.45)",
       },
 
       msg: {
@@ -630,36 +790,45 @@ export default function RegisterPage() {
         width: 380,
         color: "white",
         fontSize: 14,
-        textShadow: "0 1px 2px rgba(0,0,0,0.45)",
+        textShadow:
+          "0 1px 2px rgba(0,0,0,0.45)",
       },
 
       listWrap: {
         width: 800,
       },
+
       listHeader: {
         display: "flex",
         alignItems: "center",
-        justifyContent: "space-between",
+        justifyContent:
+          "space-between",
         marginBottom: 10,
         color: "white",
         gap: 10,
       },
+
       listTitle: {
         fontSize: 16,
         fontWeight: 900,
       },
+
       listCount: {
         fontSize: 13,
         opacity: 0.85,
-        whiteSpace: "nowrap",
+        whiteSpace:
+          "nowrap",
       },
+
       filterWrap: {
         display: "flex",
         alignItems: "center",
         gap: 10,
         flexWrap: "wrap",
-        justifyContent: "flex-end",
+        justifyContent:
+          "flex-end",
       },
+
       filterSelect: {
         height: 40,
         borderRadius: 12,
@@ -667,8 +836,10 @@ export default function RegisterPage() {
         padding: "0 12px",
         fontSize: 14,
         fontWeight: 600,
-        background: "rgba(255,255,255,0.95)",
+        background:
+          "rgba(255,255,255,0.95)",
       },
+
       searchInput: {
         height: 40,
         borderRadius: 12,
@@ -676,10 +847,12 @@ export default function RegisterPage() {
         padding: "0 12px",
         fontSize: 14,
         fontWeight: 600,
-        background: "rgba(255,255,255,0.95)",
+        background:
+          "rgba(255,255,255,0.95)",
         minWidth: 220,
         outline: "none",
       },
+
       exportBtn: {
         height: 40,
         borderRadius: 12,
@@ -687,30 +860,43 @@ export default function RegisterPage() {
         padding: "0 14px",
         fontSize: 14,
         fontWeight: 800,
-        background: "#c2b69b",
+        background:
+          "#c2b69b",
         color: "#222",
         cursor: "pointer",
-        opacity: countryFilter === "ALL" ? 0.5 : 1,
+        opacity:
+          countryFilter ===
+          "ALL"
+            ? 0.5
+            : 1,
       },
+
       listBox: {
-        background: "rgba(255,255,255,0.96)",
+        background:
+          "rgba(255,255,255,0.96)",
         borderRadius: 16,
         padding: 8,
-        boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
-        maxHeight: 5 * 60 + 8,
+        boxShadow:
+          "0 8px 24px rgba(0,0,0,0.18)",
+        maxHeight:
+          5 * 60 + 8,
         overflowY: "auto",
       },
+
       row: {
         display: "flex",
         alignItems: "center",
         gap: 12,
         padding: "10px 8px",
-        borderBottom: "1px solid rgba(0,0,0,0.06)",
+        borderBottom:
+          "1px solid rgba(0,0,0,0.06)",
         minHeight: 60,
       },
+
       rowLast: {
         borderBottom: "none",
       },
+
       thumb: {
         width: 44,
         height: 44,
@@ -719,21 +905,27 @@ export default function RegisterPage() {
         background: "#eee",
         flex: "0 0 auto",
       },
+
       rowMain: {
         minWidth: 0,
         flex: 1,
       },
+
       rowName: {
         fontWeight: 900,
         fontSize: 14,
-        whiteSpace: "nowrap",
+        whiteSpace:
+          "nowrap",
         overflow: "hidden",
-        textOverflow: "ellipsis",
+        textOverflow:
+          "ellipsis",
       },
+
       rowMeta: {
         fontSize: 12,
         opacity: 0.75,
       },
+
       rowRight: {
         display: "flex",
         alignItems: "center",
@@ -741,35 +933,44 @@ export default function RegisterPage() {
         marginLeft: 8,
         flex: "0 0 auto",
       },
+
       iconBtn,
+
       pdfBtn: {
         height: 30,
         borderRadius: 10,
-        border: "1px solid rgba(0,0,0,0.12)",
+        border:
+          "1px solid rgba(0,0,0,0.12)",
         padding: "0 10px",
-        background: "#c2b69b",
+        background:
+          "#c2b69b",
         color: "#222",
         cursor: "pointer",
-        display: "inline-flex",
+        display:
+          "inline-flex",
         alignItems: "center",
-        justifyContent: "center",
+        justifyContent:
+          "center",
         fontWeight: 900,
         lineHeight: 1,
       },
 
-      // MAIN MODALS
       overlay: {
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.6)",
+        background:
+          "rgba(0,0,0,0.6)",
         display: "flex",
         alignItems: "center",
-        justifyContent: "center",
+        justifyContent:
+          "center",
         padding: 20,
         zIndex: 10000,
       },
+
       modalCard: {
-        width: "min(460px, 100%)",
+        width:
+          "min(460px, 100%)",
         background: "white",
         borderRadius: 14,
         padding: 18,
@@ -777,15 +978,18 @@ export default function RegisterPage() {
         position: "relative",
         zIndex: 10001,
       },
+
       modalTitle: {
         fontSize: 18,
         fontWeight: 900,
         marginBottom: 8,
       },
+
       modalBody: {
         fontSize: 14,
         marginBottom: 14,
       },
+
       okBtn: {
         width: "100%",
         padding: 10,
@@ -793,52 +997,65 @@ export default function RegisterPage() {
         border: "none",
         cursor: "pointer",
         fontWeight: 900,
-        background: "#c2b69b",
+        background:
+          "#c2b69b",
         color: "#222",
       },
 
-      // CROP MODALS - HIGHER Z-INDEX
       cropOverlay: {
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.75)",
+        background:
+          "rgba(0,0,0,0.75)",
         display: "flex",
         alignItems: "center",
-        justifyContent: "center",
+        justifyContent:
+          "center",
         padding: 20,
         zIndex: 20000,
       },
+
       cropModal: {
-        width: "min(560px, 100%)",
+        width:
+          "min(560px, 100%)",
         background: "white",
         borderRadius: 12,
         overflow: "hidden",
         position: "relative",
         zIndex: 20001,
       },
+
       cropArea: {
         position: "relative",
         width: "100%",
         height: 420,
         background: "#111",
       },
+
       zoomRow: {
-        padding: "0 12px 12px 12px",
+        padding:
+          "0 12px 12px 12px",
         display: "flex",
         gap: 10,
         alignItems: "center",
       },
-      zoomInput: { width: "100%" },
+
+      zoomInput: {
+        width: "100%",
+      },
+
       modalFooter: {
         display: "flex",
         gap: 10,
         padding: 12,
       },
+
       modalBtn: {
         flex: 1,
         padding: 10,
         borderRadius: 10,
-        border: "1px solid #ddd",
+        border:
+          "1px solid #ddd",
         cursor: "pointer",
         fontWeight: 800,
       },
@@ -847,42 +1064,52 @@ export default function RegisterPage() {
         width: "100%",
         height: 44,
         borderRadius: 12,
-        border: "1px solid rgba(0,0,0,0.15)",
+        border:
+          "1px solid rgba(0,0,0,0.15)",
         padding: "0 12px",
         fontSize: 14,
         fontWeight: 600,
         outline: "none",
       },
+
       editSelect: {
         width: "100%",
         height: 44,
         borderRadius: 12,
-        border: "1px solid rgba(0,0,0,0.15)",
+        border:
+          "1px solid rgba(0,0,0,0.15)",
         padding: "0 12px",
         fontSize: 14,
         fontWeight: 600,
         outline: "none",
-        background: "white",
+        background:
+          "white",
       },
+
       editRow: {
         display: "grid",
         gap: 10,
         marginTop: 10,
       },
+
       editFooter: {
         display: "flex",
         gap: 10,
         marginTop: 14,
       },
+
       editCancel: {
         width: "100%",
         padding: 10,
         borderRadius: 10,
         cursor: "pointer",
         fontWeight: 900,
-        background: "white",
-        border: "1px solid rgba(0,0,0,0.15)",
+        background:
+          "white",
+        border:
+          "1px solid rgba(0,0,0,0.15)",
       },
+
       editSave: {
         width: "100%",
         padding: 10,
@@ -890,15 +1117,23 @@ export default function RegisterPage() {
         border: "none",
         cursor: "pointer",
         fontWeight: 900,
-        background: "#c2b69b",
+        background:
+          "#c2b69b",
         color: "#222",
-        opacity: editSaving ? 0.7 : 1,
+        opacity:
+          editSaving
+            ? 0.7
+            : 1,
       },
-      editPhotoPreviewWrap: {
-        display: "flex",
-        justifyContent: "center",
-        marginTop: 6,
-      },
+
+      editPhotoPreviewWrap:
+        {
+          display: "flex",
+          justifyContent:
+            "center",
+          marginTop: 6,
+        },
+
       editPhotoPreview: {
         width: 90,
         height: 90,
@@ -906,20 +1141,34 @@ export default function RegisterPage() {
         objectFit: "cover",
         background: "#eee",
       },
+
       editPhotoBtn: {
         width: "100%",
         padding: 10,
         borderRadius: 10,
         cursor: "pointer",
         fontWeight: 800,
-        background: "#f3f3f3",
-        border: "1px solid rgba(0,0,0,0.15)",
+        background:
+          "#f3f3f3",
+        border:
+          "1px solid rgba(0,0,0,0.15)",
       },
     };
-  }, [editSaving, countryFilter]);
+  }, [
+    editSaving,
+    countryFilter,
+  ]);
 
   if (checkingAuth) {
-    return <div style={styles.loadingPage}>Loading...</div>;
+    return (
+      <div
+        style={
+          styles.loadingPage
+        }
+      >
+        Loading...
+      </div>
+    );
   }
 
   return (
@@ -929,50 +1178,110 @@ export default function RegisterPage() {
           id="file"
           type="file"
           accept="image/*"
-          style={styles.hiddenFile}
-          onChange={onSelectFile}
+          style={
+            styles.hiddenFile
+          }
+          onChange={
+            onSelectFile
+          }
         />
 
         <div
-          style={styles.photoCircle}
-          onClick={() => document.getElementById("file")?.click()}
+          style={
+            styles.photoCircle
+          }
+          onClick={() =>
+            document
+              .getElementById(
+                "file"
+              )
+              ?.click()
+          }
           title="Upload photo"
         >
           {photoPreview ? (
-            <img src={photoPreview} alt="Cropped" style={styles.photoImg} />
+            <img
+              src={
+                photoPreview
+              }
+              alt="Cropped"
+              style={
+                styles.photoImg
+              }
+            />
           ) : (
-            <div style={styles.photoLabelWrap}>
-              <div style={styles.photoLabel}>LOAD PHOTO</div>
-              <div style={styles.photoIcon}>📷</div>
+            <div
+              style={
+                styles.photoLabelWrap
+              }
+            >
+              <div
+                style={
+                  styles.photoLabel
+                }
+              >
+                LOAD PHOTO
+              </div>
+
+              <div
+                style={
+                  styles.photoIcon
+                }
+              >
+                📷
+              </div>
             </div>
           )}
         </div>
 
         <input
-          style={styles.nameInput}
+          style={
+            styles.nameInput
+          }
           value={fullName}
-          onChange={(e) => setFullName(e.target.value)}
+          onChange={(e) =>
+            setFullName(
+              e.target.value
+            )
+          }
           placeholder="NAME SURNAME"
         />
 
         {isSuperuser ? (
           <input
-            style={styles.secondField}
+            style={
+              styles.secondField
+            }
             value={country}
-            onChange={(e) => setCountry(e.target.value)}
+            onChange={(e) =>
+              setCountry(
+                e.target.value
+              )
+            }
             placeholder="COUNTRY"
           />
         ) : (
           <select
-            style={styles.secondField}
+            style={
+              styles.secondField
+            }
             value={status}
-            onChange={(e) => setStatus(e.target.value)}
+            onChange={(e) =>
+              setStatus(
+                e.target.value
+              )
+            }
           >
-            {STATUS_OPTIONS.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
+            {STATUS_OPTIONS.map(
+              (s) => (
+                <option
+                  key={s}
+                  value={s}
+                >
+                  {s}
+                </option>
+              )
+            )}
           </select>
         )}
 
@@ -984,50 +1293,57 @@ export default function RegisterPage() {
               width: 250,
             }}
             value={status}
-            onChange={(e) => setStatus(e.target.value)}
+            onChange={(e) =>
+              setStatus(
+                e.target.value
+              )
+            }
           >
-            {STATUS_OPTIONS.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
+            {STATUS_OPTIONS.map(
+              (s) => (
+                <option
+                  key={s}
+                  value={s}
+                >
+                  {s}
+                </option>
+              )
+            )}
           </select>
         )}
 
         <button
           style={{
             ...styles.submitBtn,
-            top: isSuperuser ? 510 : 460,
+            top: isSuperuser
+              ? 510
+              : 460,
           }}
           onClick={submit}
         >
           SUBMIT
         </button>
 
-        <button
-          style={{
-            ...styles.logoutBtn,
-            top: isSuperuser ? 510 : 460,
-          }}
-          onClick={logout}
-        >
-          LOG OUT
-        </button>
-
         <div
           style={{
             ...styles.infoText,
-            top: isSuperuser ? 580 : 530,
+            top: isSuperuser
+              ? 580
+              : 530,
           }}
         >
-          Country: <strong>{country || "Not set"}</strong>
+          Country:{" "}
+          <strong>
+            {country ||
+              "Not set"}
+          </strong>
         </div>
 
         {isSuperuser && (
           <div
             style={{
               ...styles.superuserText,
-              top: isSuperuser ? 605 : 555,
+              top: 605,
             }}
           >
             SUPERUSER MODE
@@ -1038,7 +1354,9 @@ export default function RegisterPage() {
           <div
             style={{
               ...styles.msg,
-              top: isSuperuser ? 635 : 585,
+              top: isSuperuser
+                ? 635
+                : 585,
             }}
           >
             {msg}
@@ -1046,141 +1364,348 @@ export default function RegisterPage() {
         )}
       </div>
 
-      <div style={styles.listWrap}>
-        <div style={styles.listHeader}>
-          <div style={styles.listTitle}>
-            {isSuperuser ? "All registrations" : "Your registrations"}
+      <div
+        style={
+          styles.listWrap
+        }
+      >
+        <div
+          style={
+            styles.listHeader
+          }
+        >
+          <div
+            style={
+              styles.listTitle
+            }
+          >
+            {isSuperuser
+              ? "All registrations"
+              : "Your registrations"}
           </div>
 
-          <div style={styles.filterWrap}>
+          <div
+            style={
+              styles.filterWrap
+            }
+          >
             {isSuperuser && (
               <>
                 <select
-                  style={styles.filterSelect}
-                  value={countryFilter}
-                  onChange={(e) => setCountryFilter(e.target.value)}
+                  style={
+                    styles.filterSelect
+                  }
+                  value={
+                    countryFilter
+                  }
+                  onChange={(
+                    e
+                  ) =>
+                    setCountryFilter(
+                      e.target
+                        .value
+                    )
+                  }
                 >
-                  <option value="ALL">All countries</option>
-                  {allCountries.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
+                  <option value="ALL">
+                    All countries
+                  </option>
+
+                  {allCountries.map(
+                    (c) => (
+                      <option
+                        key={c}
+                        value={c}
+                      >
+                        {c}
+                      </option>
+                    )
+                  )}
                 </select>
 
                 <input
-                  style={styles.searchInput}
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  style={
+                    styles.searchInput
+                  }
+                  value={
+                    searchTerm
+                  }
+                  onChange={(
+                    e
+                  ) =>
+                    setSearchTerm(
+                      e.target
+                        .value
+                    )
+                  }
                   placeholder="Search person, country, status..."
                 />
 
                 <button
-                  style={styles.exportBtn}
-                  onClick={exportCountryPdf}
-                  disabled={countryFilter === "ALL"}
+                  style={
+                    styles.exportBtn
+                  }
+                  onClick={
+                    exportCountryPdf
+                  }
+                  disabled={
+                    countryFilter ===
+                    "ALL"
+                  }
                 >
                   Export 3×3 PDF
                 </button>
               </>
             )}
 
-            <div style={styles.listCount}>
-              {loadingList ? "Loading..." : `${filteredItems.length}`}
+            <div
+              style={
+                styles.listCount
+              }
+            >
+              {loadingList
+                ? "Loading..."
+                : `${filteredItems.length}`}
             </div>
           </div>
         </div>
 
-        <div style={styles.listBox}>
-          {filteredItems.length === 0 && !loadingList && (
-            <div style={{ padding: 10, opacity: 0.7 }}>No registrations yet.</div>
-          )}
-
-          {filteredItems.map((r, idx) => (
-            <div
-              key={r.id}
-              style={{
-                ...styles.row,
-                ...(idx === filteredItems.length - 1 ? styles.rowLast : {}),
-              }}
-            >
-              {r.photo_url ? (
-                <img src={r.photo_url} alt="" style={styles.thumb} />
-              ) : (
-                <div style={styles.thumb} />
-              )}
-
-              <div style={styles.rowMain}>
-                <div style={styles.rowName}>{r.full_name}</div>
-                <div style={styles.rowMeta}>
-                  {r.country} · {r.status || "TEAM"}
-                  {isSuperuser ? ` · entered by ${r.registered_by_email}` : ""}
-                </div>
+        <div
+          style={
+            styles.listBox
+          }
+        >
+          {filteredItems.length ===
+            0 &&
+            !loadingList && (
+              <div
+                style={{
+                  padding: 10,
+                  opacity: 0.7,
+                }}
+              >
+                No registrations
+                yet.
               </div>
+            )}
 
-              <div style={styles.rowRight}>
-                {isSuperuser && (
-                  <button
-                    title="PDF"
-                    style={styles.pdfBtn}
-                    onClick={() => openSinglePdf(r.id)}
-                  >
-                    PDF
-                  </button>
+          {filteredItems.map(
+            (r, idx) => (
+              <div
+                key={r.id}
+                style={{
+                  ...styles.row,
+                  ...(idx ===
+                  filteredItems.length -
+                    1
+                    ? styles.rowLast
+                    : {}),
+                }}
+              >
+                {r.photo_url ? (
+                  <img
+                    src={
+                      r.photo_url
+                    }
+                    alt=""
+                    style={
+                      styles.thumb
+                    }
+                  />
+                ) : (
+                  <div
+                    style={
+                      styles.thumb
+                    }
+                  />
                 )}
 
-                <button title="Edit" style={styles.iconBtn} onClick={() => openEdit(r)}>
-                  ✎
-                </button>
-
-                <button
-                  title="Delete"
-                  style={styles.iconBtn}
-                  onClick={() => deleteEntry(r.id, r.photo_path)}
+                <div
+                  style={
+                    styles.rowMain
+                  }
                 >
-                  🗑
-                </button>
+                  <div
+                    style={
+                      styles.rowName
+                    }
+                  >
+                    {
+                      r.full_name
+                    }
+                  </div>
+
+                  <div
+                    style={
+                      styles.rowMeta
+                    }
+                  >
+                    {r.country} ·{" "}
+                    {r.status ||
+                      "TEAM"}
+
+                    {isSuperuser
+                      ? ` · entered by ${r.registered_by_email}`
+                      : ""}
+                  </div>
+                </div>
+
+                <div
+                  style={
+                    styles.rowRight
+                  }
+                >
+                  {isSuperuser && (
+                    <button
+                      title="PDF"
+                      style={
+                        styles.pdfBtn
+                      }
+                      onClick={() =>
+                        openSinglePdf(
+                          r.id
+                        )
+                      }
+                    >
+                      PDF
+                    </button>
+                  )}
+
+                  <button
+                    title="Edit"
+                    style={
+                      styles.iconBtn
+                    }
+                    onClick={() =>
+                      openEdit(r)
+                    }
+                  >
+                    ✎
+                  </button>
+
+                  <button
+                    title="Delete"
+                    style={
+                      styles.iconBtn
+                    }
+                    onClick={() =>
+                      deleteEntry(
+                        r.id,
+                        r.photo_path
+                      )
+                    }
+                  >
+                    🗑
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          )}
         </div>
       </div>
 
       {cropOpen && (
-        <div style={styles.cropOverlay}>
-          <div style={styles.cropModal}>
-            <div style={styles.cropArea}>
+        <div
+          style={
+            styles.cropOverlay
+          }
+        >
+          <div
+            style={
+              styles.cropModal
+            }
+          >
+            <div
+              style={
+                styles.cropArea
+              }
+            >
               <Cropper
-                image={rawImageSrc}
+                image={
+                  rawImageSrc
+                }
                 crop={crop}
                 zoom={zoom}
                 aspect={1}
                 cropShape="round"
                 showGrid={false}
-                onCropChange={setCrop}
-                onZoomChange={setZoom}
-                onCropComplete={(a, pixels) => setCroppedAreaPixels(pixels)}
+                onCropChange={
+                  setCrop
+                }
+                onZoomChange={
+                  setZoom
+                }
+                onCropComplete={(
+                  a,
+                  pixels
+                ) =>
+                  setCroppedAreaPixels(
+                    pixels
+                  )
+                }
               />
             </div>
 
-            <div style={styles.zoomRow}>
-              <div style={{ width: 60, fontWeight: 900 }}>Zoom</div>
+            <div
+              style={
+                styles.zoomRow
+              }
+            >
+              <div
+                style={{
+                  width: 60,
+                  fontWeight: 900,
+                }}
+              >
+                Zoom
+              </div>
+
               <input
-                style={styles.zoomInput}
+                style={
+                  styles.zoomInput
+                }
                 type="range"
                 min={1}
                 max={3}
                 step={0.01}
                 value={zoom}
-                onChange={(e) => setZoom(Number(e.target.value))}
+                onChange={(e) =>
+                  setZoom(
+                    Number(
+                      e.target
+                        .value
+                    )
+                  )
+                }
               />
             </div>
 
-            <div style={styles.modalFooter}>
-              <button style={styles.modalBtn} onClick={() => setCropOpen(false)}>
+            <div
+              style={
+                styles.modalFooter
+              }
+            >
+              <button
+                style={
+                  styles.modalBtn
+                }
+                onClick={() =>
+                  setCropOpen(
+                    false
+                  )
+                }
+              >
                 Cancel
               </button>
-              <button style={styles.modalBtn} onClick={applyCrop}>
+
+              <button
+                style={
+                  styles.modalBtn
+                }
+                onClick={
+                  applyCrop
+                }
+              >
                 Use photo
               </button>
             </div>
@@ -1189,40 +1714,113 @@ export default function RegisterPage() {
       )}
 
       {editCropOpen && (
-        <div style={styles.cropOverlay}>
-          <div style={styles.cropModal}>
-            <div style={styles.cropArea}>
+        <div
+          style={
+            styles.cropOverlay
+          }
+        >
+          <div
+            style={
+              styles.cropModal
+            }
+          >
+            <div
+              style={
+                styles.cropArea
+              }
+            >
               <Cropper
-                image={editRawImageSrc}
-                crop={editCrop}
-                zoom={editZoom}
+                image={
+                  editRawImageSrc
+                }
+                crop={
+                  editCrop
+                }
+                zoom={
+                  editZoom
+                }
                 aspect={1}
                 cropShape="round"
                 showGrid={false}
-                onCropChange={setEditCrop}
-                onZoomChange={setEditZoom}
-                onCropComplete={(a, pixels) => setEditCroppedAreaPixels(pixels)}
+                onCropChange={
+                  setEditCrop
+                }
+                onZoomChange={
+                  setEditZoom
+                }
+                onCropComplete={(
+                  a,
+                  pixels
+                ) =>
+                  setEditCroppedAreaPixels(
+                    pixels
+                  )
+                }
               />
             </div>
 
-            <div style={styles.zoomRow}>
-              <div style={{ width: 60, fontWeight: 900 }}>Zoom</div>
+            <div
+              style={
+                styles.zoomRow
+              }
+            >
+              <div
+                style={{
+                  width: 60,
+                  fontWeight: 900,
+                }}
+              >
+                Zoom
+              </div>
+
               <input
-                style={styles.zoomInput}
+                style={
+                  styles.zoomInput
+                }
                 type="range"
                 min={1}
                 max={3}
                 step={0.01}
-                value={editZoom}
-                onChange={(e) => setEditZoom(Number(e.target.value))}
+                value={
+                  editZoom
+                }
+                onChange={(e) =>
+                  setEditZoom(
+                    Number(
+                      e.target
+                        .value
+                    )
+                  )
+                }
               />
             </div>
 
-            <div style={styles.modalFooter}>
-              <button style={styles.modalBtn} onClick={() => setEditCropOpen(false)}>
+            <div
+              style={
+                styles.modalFooter
+              }
+            >
+              <button
+                style={
+                  styles.modalBtn
+                }
+                onClick={() =>
+                  setEditCropOpen(
+                    false
+                  )
+                }
+              >
                 Cancel
               </button>
-              <button style={styles.modalBtn} onClick={applyEditCrop}>
+
+              <button
+                style={
+                  styles.modalBtn
+                }
+                onClick={
+                  applyEditCrop
+                }
+              >
                 Use photo
               </button>
             </div>
@@ -1231,11 +1829,50 @@ export default function RegisterPage() {
       )}
 
       {successOpen && (
-        <div style={styles.overlay} onClick={() => setSuccessOpen(false)}>
-          <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
-            <div style={styles.modalTitle}>Done</div>
-            <div style={styles.modalBody}>{successText}</div>
-            <button style={styles.okBtn} onClick={() => setSuccessOpen(false)}>
+        <div
+          style={
+            styles.overlay
+          }
+          onClick={() =>
+            setSuccessOpen(
+              false
+            )
+          }
+        >
+          <div
+            style={
+              styles.modalCard
+            }
+            onClick={(e) =>
+              e.stopPropagation()
+            }
+          >
+            <div
+              style={
+                styles.modalTitle
+              }
+            >
+              Done
+            </div>
+
+            <div
+              style={
+                styles.modalBody
+              }
+            >
+              {successText}
+            </div>
+
+            <button
+              style={
+                styles.okBtn
+              }
+              onClick={() =>
+                setSuccessOpen(
+                  false
+                )
+              }
+            >
               OK
             </button>
           </div>
@@ -1243,42 +1880,114 @@ export default function RegisterPage() {
       )}
 
       {editOpen && (
-        <div style={styles.overlay} onClick={() => setEditOpen(false)}>
-          <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
-            <div style={styles.modalTitle}>Edit registration</div>
+        <div
+          style={
+            styles.overlay
+          }
+          onClick={() =>
+            setEditOpen(false)
+          }
+        >
+          <div
+            style={
+              styles.modalCard
+            }
+            onClick={(e) =>
+              e.stopPropagation()
+            }
+          >
+            <div
+              style={
+                styles.modalTitle
+              }
+            >
+              Edit registration
+            </div>
 
-            <div style={styles.editRow}>
+            <div
+              style={
+                styles.editRow
+              }
+            >
               <input
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
+                value={
+                  editName
+                }
+                onChange={(e) =>
+                  setEditName(
+                    e.target
+                      .value
+                  )
+                }
                 placeholder="NAME SURNAME"
-                style={styles.editInput}
+                style={
+                  styles.editInput
+                }
               />
 
               <input
-                value={editCountry}
-                onChange={(e) => setEditCountry(e.target.value)}
+                value={
+                  editCountry
+                }
+                onChange={(e) =>
+                  setEditCountry(
+                    e.target
+                      .value
+                  )
+                }
                 placeholder="COUNTRY"
-                style={styles.editInput}
+                style={
+                  styles.editInput
+                }
               />
 
               <select
-                value={editStatus}
-                onChange={(e) => setEditStatus(e.target.value)}
-                style={styles.editSelect}
+                value={
+                  editStatus
+                }
+                onChange={(e) =>
+                  setEditStatus(
+                    e.target
+                      .value
+                  )
+                }
+                style={
+                  styles.editSelect
+                }
               >
-                {STATUS_OPTIONS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
+                {STATUS_OPTIONS.map(
+                  (s) => (
+                    <option
+                      key={s}
+                      value={s}
+                    >
+                      {s}
+                    </option>
+                  )
+                )}
               </select>
 
-              <div style={styles.editPhotoPreviewWrap}>
+              <div
+                style={
+                  styles.editPhotoPreviewWrap
+                }
+              >
                 {editPhotoUrl ? (
-                  <img src={editPhotoUrl} alt="Preview" style={styles.editPhotoPreview} />
+                  <img
+                    src={
+                      editPhotoUrl
+                    }
+                    alt="Preview"
+                    style={
+                      styles.editPhotoPreview
+                    }
+                  />
                 ) : (
-                  <div style={styles.editPhotoPreview} />
+                  <div
+                    style={
+                      styles.editPhotoPreview
+                    }
+                  />
                 )}
               </div>
 
@@ -1286,25 +1995,64 @@ export default function RegisterPage() {
                 id="edit-file"
                 type="file"
                 accept="image/*"
-                style={{ display: "none" }}
-                onChange={onSelectEditFile}
+                style={{
+                  display:
+                    "none",
+                }}
+                onChange={
+                  onSelectEditFile
+                }
               />
 
               <button
                 type="button"
-                style={styles.editPhotoBtn}
-                onClick={() => document.getElementById("edit-file")?.click()}
+                style={
+                  styles.editPhotoBtn
+                }
+                onClick={() =>
+                  document
+                    .getElementById(
+                      "edit-file"
+                    )
+                    ?.click()
+                }
               >
                 Replace photo
               </button>
             </div>
 
-            <div style={styles.editFooter}>
-              <button style={styles.editCancel} onClick={() => setEditOpen(false)}>
+            <div
+              style={
+                styles.editFooter
+              }
+            >
+              <button
+                style={
+                  styles.editCancel
+                }
+                onClick={() =>
+                  setEditOpen(
+                    false
+                  )
+                }
+              >
                 Cancel
               </button>
-              <button style={styles.editSave} onClick={saveEdit} disabled={editSaving}>
-                {editSaving ? "Saving..." : "Save"}
+
+              <button
+                style={
+                  styles.editSave
+                }
+                onClick={
+                  saveEdit
+                }
+                disabled={
+                  editSaving
+                }
+              >
+                {editSaving
+                  ? "Saving..."
+                  : "Save"}
               </button>
             </div>
           </div>
